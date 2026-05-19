@@ -1,3 +1,3 @@
-export const launch = jest.fn();
-export const executablePath = jest.fn();
+export const launch = () => Promise.resolve(null);
+export const executablePath = () => '';
 export default { launch, executablePath };
