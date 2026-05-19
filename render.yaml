@@ -7,7 +7,7 @@ services:
     runtime: node
     region: singapore
     plan: starter
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/main
     healthCheckPath: /health
     autoDeploy: false  # Controlled by GitHub Actions CI/CD
