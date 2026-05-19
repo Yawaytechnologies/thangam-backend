@@ -1,0 +1,35 @@
+# Render infrastructure-as-code
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: thangam-backend
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main
+    healthCheckPath: /health
+    autoDeploy: false  # Controlled by GitHub Actions CI/CD
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: SUPABASE_BUCKET
+        value: sth-files
+      # Set these manually in the Render dashboard (Dashboard → Environment):
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

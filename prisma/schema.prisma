@@ -1,0 +1,525 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DIRECTOR
+  EXECUTIVE_DIRECTOR
+  DEPUTY_DIRECTOR
+  SENIOR_MANAGER
+  BUSINESS_MANAGER
+  AGENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  VILLA
+  APARTMENT
+  PLOT
+}
+
+enum WorkflowStatus {
+  AVAILABLE
+  BOOKING_INITIATED
+  TOKEN_RECEIVED
+  ADVANCE_PAYMENT
+  REGISTRATION_PENDING
+  FINAL_SETTLEMENT_PENDING
+  COMPLETED
+}
+
+enum BookingStatus {
+  BOOKING_INITIATED
+  TOKEN_RECEIVED
+  ADVANCE_PAYMENT
+  REGISTRATION_PENDING
+  FINAL_SETTLEMENT_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum BillingStatus {
+  PENDING
+  PARTIAL_PAYMENT
+  PAID
+  FINAL_SETTLEMENT
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+  BANK_TRANSFER
+  GPAY
+  UPI
+}
+
+enum NotificationType {
+  ADMIN_ACTIVITY
+  MEMBER_ACTIVITY
+  BRANCH_ACTIVITY
+  PROPERTY_ACTIVITY
+  BOOKING_ACTIVITY
+  BILLING_ACTIVITY
+  SYSTEM_ACTIVITY
+  TEAM_ACTIVITY
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  RESOLVED
+  IMPORTANT
+}
+
+enum DocumentType {
+  PROFILE_PHOTO
+  AADHAAR
+  PAN
+  VOTER_ID
+  DRIVING_LICENSE
+  ADDRESS_PROOF
+  BANK_PASSBOOK
+  PROPERTY_IMAGE
+  LAYOUT_DOCUMENT
+  APPROVAL_DOCUMENT
+  BOOKING_DOCUMENT
+  BILLING_DOCUMENT
+  PAYMENT_RECEIPT
+  SETTLEMENT_DOCUMENT
+  ESTIMATE_COPY
+  BROCHURE
+}
+
+enum MessageType {
+  BOOKING_FOLLOW_UP
+  BILLING_FOLLOW_UP
+  SETTLEMENT_REMINDER
+  PROPERTY_WORKFLOW_UPDATE
+  DOCUMENT_SUBMISSION_REMINDER
+  GENERAL_MESSAGE
+}
+
+// ─── User (auth identity) ─────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String?    @unique
+  phone        String?    @unique
+  passwordHash String     @map("password_hash")
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  sessions               Session[]
+  admin                  Admin?
+  member                 Member?
+  sentNotifications      Notification[]          @relation("SentNotifications")
+  notificationRecipients NotificationRecipient[]
+  sentMessages           NotificationMessage[]   @relation("MessageSender")
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  refreshToken String   @unique @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ─── Branch ───────────────────────────────────────────────────────────────────
+
+model Branch {
+  id         String       @id @default(uuid())
+  branchCode String       @unique @map("branch_code")
+  name       String
+  branchType String?      @map("branch_type")
+  phone      String?
+  email      String?
+  address    String?
+  city       String?
+  district   String?
+  state      String?
+  pincode    String?
+  status     BranchStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  admins        Admin[]
+  members       Member[]
+  bookings      Booking[]
+  notifications Notification[]
+
+  @@map("branches")
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+model Admin {
+  id          String     @id @default(uuid())
+  adminId     String     @unique @map("admin_id")
+  userId      String     @unique @map("user_id")
+  branchId    String     @map("branch_id")
+  fullName    String     @map("full_name")
+  gender      String?
+  dateOfBirth DateTime?  @map("date_of_birth")
+  phone       String
+  email       String?
+  address     String?
+  city        String?
+  district    String?
+  state       String?
+  pincode     String?
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch     @relation(fields: [branchId], references: [id])
+  documents Document[]
+
+  @@map("admins")
+}
+
+// ─── Member ───────────────────────────────────────────────────────────────────
+
+model Member {
+  id              String     @id @default(uuid())
+  memberId        String     @unique @map("member_id")
+  userId          String     @unique @map("user_id")
+  branchId        String     @map("branch_id")
+  fullName        String     @map("full_name")
+  gender          String?
+  dateOfBirth     DateTime?  @map("date_of_birth")
+  bloodGroup      String?    @map("blood_group")
+  qualification   String?
+  experience      String?
+  phone           String
+  alternatePhone  String?    @map("alternate_phone")
+  email           String?
+  address         String?
+  city            String?
+  district        String?
+  state           String?
+  pincode         String?
+  panNumber       String?    @unique @map("pan_number")
+  aadhaarNumber   String?    @unique @map("aadhaar_number")
+  voterIdNumber   String?    @map("voter_id_number")
+  drivingLicense  String?    @map("driving_license")
+  role            Role
+  introName       String?    @map("intro_name")
+  reportsToId     String?    @map("reports_to_id")
+  codeNumber      String?    @map("code_number")
+  nomineeName     String?    @map("nominee_name")
+  nomineeRelation String?    @map("nominee_relation")
+  nomineePhone    String?    @map("nominee_phone")
+  bankName        String?    @map("bank_name")
+  accountHolder   String?    @map("account_holder")
+  accountNumber   String?    @map("account_number")
+  ifscCode        String?    @map("ifsc_code")
+  bankBranch      String?    @map("bank_branch")
+  status          UserStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  reportsTo     Member?        @relation("Hierarchy", fields: [reportsToId], references: [id])
+  downline      Member[]       @relation("Hierarchy")
+  documents     Document[]
+  topPerformers TopPerformer[]
+
+  @@map("members")
+}
+
+// ─── Property ─────────────────────────────────────────────────────────────────
+
+model Property {
+  id             String         @id @default(uuid())
+  propertyId     String         @unique @map("property_id")
+  propertyName   String         @map("property_name")
+  propertyCode   String?        @unique @map("property_code")
+  projectName    String         @map("project_name")
+  plotNumber     String         @map("plot_number")
+  propertyType   PropertyType   @map("property_type")
+  squareFeet     Float?         @map("square_feet")
+  facing         String?
+  approvalStatus String?        @map("approval_status")
+  address        String?
+  city           String?
+  district       String?
+  state          String?
+  pincode        String?
+  mapLocation    String?        @map("map_location")
+  workflowStatus WorkflowStatus @default(AVAILABLE) @map("workflow_status")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  bookings        Booking[]
+  workflowHistory WorkflowHistory[]
+  documents       Document[]
+  notifications   Notification[]
+
+  @@map("properties")
+}
+
+// ─── Booking ──────────────────────────────────────────────────────────────────
+
+model Booking {
+  id               String        @id @default(uuid())
+  bookingId        String        @unique @map("booking_id")
+  propertyId       String        @map("property_id")
+  branchId         String        @map("branch_id")
+  applicantName    String        @map("applicant_name")
+  relation         String?
+  applicantAddress String?       @map("applicant_address")
+  pinCode          String?       @map("pin_code")
+  cellNumber       String        @map("cell_number")
+  dateOfBirth      DateTime?     @map("date_of_birth")
+  weddingDay       DateTime?     @map("wedding_day")
+  projectName      String        @map("project_name")
+  plotNumber       String        @map("plot_number")
+  squareFeet       Float?        @map("square_feet")
+  bookingDate      DateTime      @map("booking_date")
+  edDdSmBmName     String?       @map("ed_dd_sm_bm_name")
+  referenceCode    String?       @map("reference_code")
+  directorName     String?       @map("director_name")
+  status           BookingStatus @default(BOOKING_INITIATED)
+  signatureUrl     String?       @map("signature_url")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  property        Property              @relation(fields: [propertyId], references: [id])
+  branch          Branch                @relation(fields: [branchId], references: [id])
+  payments        BookingPayment[]
+  denominations   BookingDenomination[]
+  billing         Billing[]
+  workflowHistory WorkflowHistory[]
+  documents       Document[]
+  notifications   Notification[]
+
+  @@map("bookings")
+}
+
+model BookingPayment {
+  id            String        @id @default(uuid())
+  bookingId     String        @map("booking_id")
+  bankName      String?       @map("bank_name")
+  favourOf      String?       @map("favour_of")
+  chequeNumber  String?       @map("cheque_number")
+  chequeDate    DateTime?     @map("cheque_date")
+  gpayReference String?       @map("gpay_reference")
+  cashAmount    Float?        @map("cash_amount")
+  totalAmount   Float         @map("total_amount")
+  paymentMethod PaymentMethod @map("payment_method")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_payments")
+}
+
+model BookingDenomination {
+  id           String  @id @default(uuid())
+  bookingId    String  @map("booking_id")
+  denomination Int
+  count        Int
+  amount       Float
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_denominations")
+}
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+model Billing {
+  id               String        @id @default(uuid())
+  billingId        String        @unique @map("billing_id")
+  bookingId        String        @map("booking_id")
+  buyerName        String        @map("buyer_name")
+  buyerAddress     String?       @map("buyer_address")
+  buyerPhone       String        @map("buyer_phone")
+  orderNumber      String?       @map("order_number")
+  billingNumber    String?       @map("billing_number")
+  billingDate      DateTime      @map("billing_date")
+  paymentMethod    PaymentMethod @map("payment_method")
+  amountInNumbers  Float         @map("amount_in_numbers")
+  amountInWords    String        @map("amount_in_words")
+  totalReceived    Float         @map("total_received")
+  totalBalance     Float         @map("total_balance")
+  operationalNotes String?       @map("operational_notes")
+  settlementNotes  String?       @map("settlement_notes")
+  termsConditions  String?       @map("terms_conditions")
+  signatureUrl     String?       @map("signature_url")
+  status           BillingStatus @default(PENDING)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  booking         Booking           @relation(fields: [bookingId], references: [id])
+  workflowHistory WorkflowHistory[]
+  documents       Document[]
+  notifications   Notification[]
+
+  @@map("billing")
+}
+
+// ─── Workflow History ─────────────────────────────────────────────────────────
+
+model WorkflowHistory {
+  id          String   @id @default(uuid())
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  fromStatus  String?  @map("from_status")
+  toStatus    String   @map("to_status")
+  remarks     String?
+  performedBy String?  @map("performed_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  property Property? @relation(fields: [entityId], references: [id], map: "wh_property_fk")
+  booking  Booking?  @relation(fields: [entityId], references: [id], map: "wh_booking_fk")
+  billing  Billing?  @relation(fields: [entityId], references: [id], map: "wh_billing_fk")
+
+  @@map("workflow_history")
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
+model Document {
+  id           String       @id @default(uuid())
+  entityType   String       @map("entity_type")
+  entityId     String       @map("entity_id")
+  documentType DocumentType @map("document_type")
+  fileName     String       @map("file_name")
+  storagePath  String       @map("storage_path")
+  mimeType     String       @map("mime_type")
+  fileSize     Int?         @map("file_size")
+  isVerified   Boolean      @default(false) @map("is_verified")
+  uploadedBy   String?      @map("uploaded_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  member   Member?   @relation(fields: [entityId], references: [id], map: "doc_member_fk")
+  admin    Admin?    @relation(fields: [entityId], references: [id], map: "doc_admin_fk")
+  property Property? @relation(fields: [entityId], references: [id], map: "doc_property_fk")
+  booking  Booking?  @relation(fields: [entityId], references: [id], map: "doc_booking_fk")
+  billing  Billing?  @relation(fields: [entityId], references: [id], map: "doc_billing_fk")
+
+  @@map("documents")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id              String           @id @default(uuid())
+  title           String
+  message         String
+  type            NotificationType
+  priority        String           @default("NORMAL")
+  relatedModule   String?          @map("related_module")
+  relatedEntityId String?          @map("related_entity_id")
+  triggeredById   String?          @map("triggered_by_id")
+  branchId        String?          @map("branch_id")
+  propertyId      String?          @map("property_id")
+  bookingId       String?          @map("booking_id")
+  billingId       String?          @map("billing_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  triggeredBy User?     @relation("SentNotifications", fields: [triggeredById], references: [id])
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  property    Property? @relation(fields: [propertyId], references: [id])
+  booking     Booking?  @relation(fields: [bookingId], references: [id])
+  billing     Billing?  @relation(fields: [billingId], references: [id])
+
+  recipients NotificationRecipient[]
+
+  @@map("notifications")
+}
+
+model NotificationRecipient {
+  id             String             @id @default(uuid())
+  notificationId String             @map("notification_id")
+  userId         String             @map("user_id")
+  status         NotificationStatus @default(UNREAD)
+  readAt         DateTime?          @map("read_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@map("notification_recipients")
+}
+
+model NotificationMessage {
+  id              String      @id @default(uuid())
+  senderId        String      @map("sender_id")
+  recipientName   String      @map("recipient_name")
+  recipientRole   String      @map("recipient_role")
+  branchId        String?     @map("branch_id")
+  messageType     MessageType @map("message_type")
+  subject         String
+  body            String
+  relatedModule   String?     @map("related_module")
+  relatedEntityId String?     @map("related_entity_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  sender User @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@map("notification_messages")
+}
+
+// ─── Top Performers ───────────────────────────────────────────────────────────
+
+model TopPerformer {
+  id              String   @id @default(uuid())
+  memberId        String   @map("member_id")
+  role            Role
+  rank            Int
+  displayOrder    Int      @map("display_order")
+  taggedCount     Int      @default(0) @map("tagged_count")
+  propertiesCount Int      @default(0) @map("properties_count")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@map("top_performers")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
