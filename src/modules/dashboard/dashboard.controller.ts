@@ -18,6 +18,7 @@ const MOBILE_ROLES = [
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
+@Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}

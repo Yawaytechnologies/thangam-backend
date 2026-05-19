@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiBody } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -53,7 +54,7 @@ export class AuthController {
     // Accept token from httpOnly cookie (web) OR request body (mobile)
     const token = req.cookies?.refresh_token || req.body?.refreshToken;
     if (!token) {
-      return res.status(HttpStatus.UNAUTHORIZED).json({ message: 'No refresh token' });
+      throw new UnauthorizedException('No refresh token provided');
     }
     const result = await this.authService.refreshToken(token);
     res.cookie('refresh_token', result.refreshToken, {

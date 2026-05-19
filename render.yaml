@@ -18,7 +18,7 @@ services:
         value: 15m
       - key: JWT_REFRESH_EXPIRES_IN
         value: 7d
-      - key: SUPABASE_BUCKET
+      - key: SUPABASE_STORAGE_BUCKET
         value: sth-files
       # Set these manually in the Render dashboard (Dashboard → Environment):
       - key: DATABASE_URL
