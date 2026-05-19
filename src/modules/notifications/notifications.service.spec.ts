@@ -61,8 +61,12 @@ describe('NotificationsService', () => {
 
   describe('findLatest', () => {
     it('returns at most 10 notifications ordered by newest first', async () => {
-      const fakeRecipients = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}` }));
-      mockPrisma.notificationRecipient.findMany.mockResolvedValue(fakeRecipients);
+      const fakeRecipients = Array.from({ length: 10 }, (_, i) => ({
+        id: `r${i}`,
+      }));
+      mockPrisma.notificationRecipient.findMany.mockResolvedValue(
+        fakeRecipients,
+      );
 
       const result = await service.findLatest('user-1');
 
@@ -82,19 +86,31 @@ describe('NotificationsService', () => {
   describe('markRead', () => {
     it('throws NotFoundException when notification is not found for that user', async () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
-      await expect(service.markRead('notif-1', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.markRead('notif-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('updates status to READ and sets readAt', async () => {
-      const recipient = { id: 'r1', notificationId: 'notif-1', userId: 'user-1' };
+      const recipient = {
+        id: 'r1',
+        notificationId: 'notif-1',
+        userId: 'user-1',
+      };
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(recipient);
-      mockPrisma.notificationRecipient.update.mockResolvedValue({ ...recipient, status: 'READ' });
+      mockPrisma.notificationRecipient.update.mockResolvedValue({
+        ...recipient,
+        status: 'READ',
+      });
 
       await service.markRead('notif-1', 'user-1');
 
       expect(mockPrisma.notificationRecipient.update).toHaveBeenCalledWith({
         where: { id: 'r1' },
-        data: expect.objectContaining({ status: NotificationStatus.READ, readAt: expect.any(Date) }),
+        data: expect.objectContaining({
+          status: NotificationStatus.READ,
+          readAt: expect.any(Date),
+        }),
       });
     });
 
@@ -111,17 +127,24 @@ describe('NotificationsService', () => {
 
   describe('markAllRead', () => {
     it('updates all UNREAD notifications for the user', async () => {
-      mockPrisma.notificationRecipient.updateMany.mockResolvedValue({ count: 4 });
+      mockPrisma.notificationRecipient.updateMany.mockResolvedValue({
+        count: 4,
+      });
       const result = await service.markAllRead('user-1');
       expect(mockPrisma.notificationRecipient.updateMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', status: NotificationStatus.UNREAD },
-        data: expect.objectContaining({ status: NotificationStatus.READ, readAt: expect.any(Date) }),
+        data: expect.objectContaining({
+          status: NotificationStatus.READ,
+          readAt: expect.any(Date),
+        }),
       });
       expect(result).toEqual({ updated: 4 });
     });
 
     it('returns { updated: 0 } when all are already read', async () => {
-      mockPrisma.notificationRecipient.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.notificationRecipient.updateMany.mockResolvedValue({
+        count: 0,
+      });
       const result = await service.markAllRead('user-1');
       expect(result).toEqual({ updated: 0 });
     });
@@ -132,7 +155,9 @@ describe('NotificationsService', () => {
   describe('findOne', () => {
     it('throws NotFoundException when notification not found for user', async () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
-      await expect(service.findOne('notif-1', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('notif-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('returns the notification recipient with notification details', async () => {
@@ -140,7 +165,11 @@ describe('NotificationsService', () => {
         id: 'r1',
         notificationId: 'n1',
         userId: 'user-1',
-        notification: { title: 'Test', message: 'Msg', type: NotificationType.BOOKING_ACTIVITY },
+        notification: {
+          title: 'Test',
+          message: 'Msg',
+          type: NotificationType.BOOKING_ACTIVITY,
+        },
       };
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(recipient);
       const result = await service.findOne('n1', 'user-1');

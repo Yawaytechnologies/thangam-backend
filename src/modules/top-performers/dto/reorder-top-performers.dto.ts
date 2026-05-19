@@ -4,14 +4,16 @@ import {
   IsArray,
   IsNotEmpty,
   IsNumber,
-  IsString,
   IsUUID,
   Min,
   ValidateNested,
 } from 'class-validator';
 
 class ReorderItemDto {
-  @ApiProperty({ description: 'UUID of the top performer record', format: 'uuid' })
+  @ApiProperty({
+    description: 'UUID of the top performer record',
+    format: 'uuid',
+  })
   @IsUUID()
   @IsNotEmpty()
   id: string;

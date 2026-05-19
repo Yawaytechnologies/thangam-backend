@@ -10,7 +10,13 @@ import {
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiResponse,
+  ApiBody,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -27,10 +33,19 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email/phone and password' })
-  @ApiResponse({ status: 200, description: 'Login successful — returns user, accessToken, refreshToken' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful — returns user, accessToken, refreshToken',
+  })
   @ApiResponse({ status: 400, description: 'Email or phone is required' })
-  @ApiResponse({ status: 401, description: 'Invalid credentials or account inactive' })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid credentials or account inactive',
+  })
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.login(dto);
     // Set httpOnly cookie for web clients
     res.cookie('refresh_token', result.refreshToken, {
@@ -40,17 +55,42 @@ export class AuthController {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     // Also return refreshToken in body for mobile clients (SecureStore)
-    return { user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken };
+    return {
+      user: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    };
   }
 
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token (cookie for web, body for mobile)' })
-  @ApiBody({ schema: { properties: { refreshToken: { type: 'string', description: 'Required for mobile clients; web clients use httpOnly cookie' } } } })
-  @ApiResponse({ status: 200, description: 'Returns new accessToken and refreshToken' })
-  @ApiResponse({ status: 401, description: 'No refresh token provided or token expired/invalid' })
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  @ApiOperation({
+    summary: 'Refresh access token (cookie for web, body for mobile)',
+  })
+  @ApiBody({
+    schema: {
+      properties: {
+        refreshToken: {
+          type: 'string',
+          description:
+            'Required for mobile clients; web clients use httpOnly cookie',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns new accessToken and refreshToken',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'No refresh token provided or token expired/invalid',
+  })
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     // Accept token from httpOnly cookie (web) OR request body (mobile)
     const token = req.cookies?.refresh_token || req.body?.refreshToken;
     if (!token) {
@@ -64,7 +104,10 @@ export class AuthController {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     // Return new refreshToken in body for mobile token rotation
-    return { accessToken: result.accessToken, refreshToken: result.refreshToken };
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -85,7 +128,10 @@ export class AuthController {
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current authenticated user' })
-  @ApiResponse({ status: 200, description: 'Returns current user with admin/member details' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns current user with admin/member details',
+  })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   async getMe(@CurrentUser('id') userId: string) {
     return this.authService.getMe(userId);

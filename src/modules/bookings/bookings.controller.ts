@@ -20,7 +20,6 @@ import {
   ApiParam,
   ApiBody,
   ApiResponse,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { Role, BookingStatus } from '@prisma/client';
 import type { Response } from 'express';
@@ -46,10 +45,7 @@ export class BookingsController {
   @ApiResponse({ status: 200, description: 'Paginated list of bookings' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
-  findAll(
-    @CurrentUser() user: any,
-    @Query() filters: BookingFilterDto,
-  ) {
+  findAll(@CurrentUser() user: any, @Query() filters: BookingFilterDto) {
     return this.bookingsService.findAll(user, filters);
   }
 
@@ -57,13 +53,13 @@ export class BookingsController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Create a new booking' })
   @ApiResponse({ status: 201, description: 'Booking created successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid input or property not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or property not found',
+  })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
-  create(
-    @Body() dto: CreateBookingDto,
-    @CurrentUser() user: any,
-  ) {
+  create(@Body() dto: CreateBookingDto, @CurrentUser() user: any) {
     return this.bookingsService.create(dto, user);
   }
 
@@ -94,9 +90,14 @@ export class BookingsController {
   @Patch(':id/status')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update booking status (advances property workflow)' })
+  @ApiOperation({
+    summary: 'Update booking status (advances property workflow)',
+  })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Status updated and workflow advanced' })
+  @ApiResponse({
+    status: 200,
+    description: 'Status updated and workflow advanced',
+  })
   @ApiResponse({ status: 404, description: 'Booking not found' })
   @ApiBody({
     schema: {
@@ -119,12 +120,13 @@ export class BookingsController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Download booking PDF' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'PDF file stream', content: { 'application/pdf': {} } })
+  @ApiResponse({
+    status: 200,
+    description: 'PDF file stream',
+    content: { 'application/pdf': {} },
+  })
   @ApiResponse({ status: 404, description: 'Booking not found' })
-  async getPdf(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Res() res: Response,
-  ) {
+  async getPdf(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
     const buffer = await this.bookingsService.generatePdf(id);
     res.set({
       'Content-Type': 'application/pdf',

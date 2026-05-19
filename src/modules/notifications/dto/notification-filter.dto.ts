@@ -4,17 +4,25 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType, NotificationStatus } from '@prisma/client';
 
 export class NotificationFilterDto {
-  @ApiPropertyOptional({ description: 'Search by title, bookingId or billingId' })
+  @ApiPropertyOptional({
+    description: 'Search by title, bookingId or billingId',
+  })
   @IsString()
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ enum: NotificationType, description: 'Filter by notification type' })
+  @ApiPropertyOptional({
+    enum: NotificationType,
+    description: 'Filter by notification type',
+  })
   @IsEnum(NotificationType)
   @IsOptional()
   type?: NotificationType;
 
-  @ApiPropertyOptional({ enum: NotificationStatus, description: 'Filter by notification status' })
+  @ApiPropertyOptional({
+    enum: NotificationStatus,
+    description: 'Filter by notification status',
+  })
   @IsEnum(NotificationStatus)
   @IsOptional()
   status?: NotificationStatus;

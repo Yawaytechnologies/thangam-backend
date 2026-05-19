@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { BookingStatus, BillingStatus, Role, UserStatus, WorkflowStatus } from '@prisma/client';
+import {
+  BookingStatus,
+  BillingStatus,
+  Role,
+  UserStatus,
+  WorkflowStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -11,13 +17,37 @@ export class DashboardService {
   async getSuperAdminStats() {
     const now = new Date();
 
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      0,
+      0,
+      0,
+      0,
+    );
 
     const dayOfWeek = now.getDay(); // 0 = Sunday
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const mondayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+    const mondayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + diffToMonday,
+      0,
+      0,
+      0,
+      0,
+    );
 
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const monthStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
 
     const [
       totalMembers,
@@ -67,7 +97,15 @@ export class DashboardService {
 
   async getAdminStats(branchId: string) {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const monthStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
 
     const [
       totalMembers,
@@ -91,7 +129,9 @@ export class DashboardService {
       this.prisma.billing.count({
         where: {
           booking: { branchId },
-          status: { in: [BillingStatus.PENDING, BillingStatus.PARTIAL_PAYMENT] },
+          status: {
+            in: [BillingStatus.PENDING, BillingStatus.PARTIAL_PAYMENT],
+          },
         },
       }),
       this.prisma.billing.count({
@@ -173,33 +213,37 @@ export class DashboardService {
   async getUserDashboard(userId: string, memberRole: string, branchId: string) {
     const downlineRoles = this.getDownlineRoles(memberRole as Role);
 
-    const [totalNetwork, activeMembers, availableProperties, unreadNotifications] =
-      await Promise.all([
-        this.prisma.member.count({
-          where: {
-            branchId,
-            role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
-          },
-        }),
-        this.prisma.member.count({
-          where: {
-            branchId,
-            status: UserStatus.ACTIVE,
-            role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
-          },
-        }),
-        this.prisma.property.count({
-          where: { workflowStatus: WorkflowStatus.AVAILABLE },
-        }),
-        memberRole === Role.DIRECTOR
-          ? this.prisma.notificationRecipient.count({
-              where: {
-                user: { member: { userId } },
-                status: 'UNREAD',
-              },
-            })
-          : Promise.resolve(0),
-      ]);
+    const [
+      totalNetwork,
+      activeMembers,
+      availableProperties,
+      unreadNotifications,
+    ] = await Promise.all([
+      this.prisma.member.count({
+        where: {
+          branchId,
+          role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
+        },
+      }),
+      this.prisma.member.count({
+        where: {
+          branchId,
+          status: UserStatus.ACTIVE,
+          role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
+        },
+      }),
+      this.prisma.property.count({
+        where: { workflowStatus: WorkflowStatus.AVAILABLE },
+      }),
+      memberRole === Role.DIRECTOR
+        ? this.prisma.notificationRecipient.count({
+            where: {
+              user: { member: { userId } },
+              status: 'UNREAD',
+            },
+          })
+        : Promise.resolve(0),
+    ]);
 
     return {
       totalNetwork,
@@ -229,38 +273,39 @@ export class DashboardService {
             branchId: member.branchId,
           };
 
-    const [finalSettlementBookings, registrationPendingBookings] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          ...networkWhere,
-          status: BookingStatus.FINAL_SETTLEMENT_PENDING,
-        },
-        take: 5,
-        orderBy: { updatedAt: 'desc' },
-        select: {
-          id: true,
-          bookingId: true,
-          applicantName: true,
-          projectName: true,
-          status: true,
-        },
-      }),
-      this.prisma.booking.findMany({
-        where: {
-          ...networkWhere,
-          status: BookingStatus.REGISTRATION_PENDING,
-        },
-        take: 5,
-        orderBy: { updatedAt: 'desc' },
-        select: {
-          id: true,
-          bookingId: true,
-          applicantName: true,
-          projectName: true,
-          status: true,
-        },
-      }),
-    ]);
+    const [finalSettlementBookings, registrationPendingBookings] =
+      await Promise.all([
+        this.prisma.booking.findMany({
+          where: {
+            ...networkWhere,
+            status: BookingStatus.FINAL_SETTLEMENT_PENDING,
+          },
+          take: 5,
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            bookingId: true,
+            applicantName: true,
+            projectName: true,
+            status: true,
+          },
+        }),
+        this.prisma.booking.findMany({
+          where: {
+            ...networkWhere,
+            status: BookingStatus.REGISTRATION_PENDING,
+          },
+          take: 5,
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            bookingId: true,
+            applicantName: true,
+            projectName: true,
+            status: true,
+          },
+        }),
+      ]);
 
     const alerts: Array<{
       type: string;

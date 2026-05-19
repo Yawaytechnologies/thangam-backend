@@ -28,7 +28,11 @@ const mockPrisma = {
 
 const mockPdfService = { generatePdf: jest.fn() };
 
-const adminUser = { id: 'admin-1', role: Role.ADMIN, admin: { branchId: 'branch-1' } };
+const adminUser = {
+  id: 'admin-1',
+  role: Role.ADMIN,
+  admin: { branchId: 'branch-1' },
+};
 const superAdminUser = { id: 'super-1', role: Role.SUPER_ADMIN, admin: null };
 
 describe('BillingService', () => {
@@ -78,7 +82,10 @@ describe('BillingService', () => {
       mockPrisma.billing.findMany.mockResolvedValue([{ id: 'b1' }]);
       mockPrisma.billing.count.mockResolvedValue(1);
 
-      const result = await service.findAll(superAdminUser, { page: 1, limit: 20 });
+      const result = await service.findAll(superAdminUser, {
+        page: 1,
+        limit: 20,
+      });
       expect(result).toMatchObject({ total: 1, page: 1, limit: 20 });
     });
   });
@@ -101,12 +108,18 @@ describe('BillingService', () => {
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
           booking: { findUnique: jest.fn().mockResolvedValue(null) },
-          billing: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+          billing: {
+            count: jest.fn(),
+            create: jest.fn(),
+            findUnique: jest.fn(),
+          },
           workflowHistory: { create: jest.fn() },
         }),
       );
 
-      await expect(service.create(dto as any, superAdminUser)).rejects.toThrow(NotFoundException);
+      await expect(service.create(dto as any, superAdminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws ForbiddenException when ADMIN tries to bill a booking from another branch', async () => {
@@ -119,22 +132,34 @@ describe('BillingService', () => {
               branch: { id: 'other-branch', name: 'Other' },
             }),
           },
-          billing: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+          billing: {
+            count: jest.fn(),
+            create: jest.fn(),
+            findUnique: jest.fn(),
+          },
           workflowHistory: { create: jest.fn() },
         }),
       );
 
-      await expect(service.create(dto as any, adminUser)).rejects.toThrow(ForbiddenException);
+      await expect(service.create(dto as any, adminUser)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('creates billing with PENDING status by default', async () => {
       const txCreate = jest.fn().mockResolvedValue({ id: 'billing-1' });
-      const txFindUnique = jest.fn().mockResolvedValue({ id: 'billing-1', booking: {} });
+      const txFindUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 'billing-1', booking: {} });
 
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
           booking: {
-            findUnique: jest.fn().mockResolvedValue({ id: 'booking-1', branchId: 'branch-1', branch: {} }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'booking-1',
+              branchId: 'branch-1',
+              branch: {},
+            }),
           },
           billing: {
             count: jest.fn().mockResolvedValue(0),
@@ -145,7 +170,7 @@ describe('BillingService', () => {
         }),
       );
 
-      await service.create(dto as any, adminUser);
+      await service.create(dto, adminUser);
 
       expect(txCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -156,12 +181,18 @@ describe('BillingService', () => {
 
     it('auto-generates amountInWords from amountInNumbers', async () => {
       const txCreate = jest.fn().mockResolvedValue({ id: 'billing-1' });
-      const txFindUnique = jest.fn().mockResolvedValue({ id: 'billing-1', booking: {} });
+      const txFindUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 'billing-1', booking: {} });
 
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
           booking: {
-            findUnique: jest.fn().mockResolvedValue({ id: 'booking-1', branchId: 'branch-1', branch: {} }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'booking-1',
+              branchId: 'branch-1',
+              branch: {},
+            }),
           },
           billing: {
             count: jest.fn().mockResolvedValue(0),
@@ -172,11 +203,13 @@ describe('BillingService', () => {
         }),
       );
 
-      await service.create(dto as any, adminUser);
+      await service.create(dto, adminUser);
 
       expect(txCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ amountInWords: 'Fifty Thousand Rupees Only' }),
+          data: expect.objectContaining({
+            amountInWords: 'Fifty Thousand Rupees Only',
+          }),
         }),
       );
     });
@@ -187,7 +220,9 @@ describe('BillingService', () => {
   describe('findOne', () => {
     it('throws NotFoundException when billing not found', async () => {
       mockPrisma.billing.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('bad-id')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('bad-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('returns billing when found', async () => {

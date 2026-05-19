@@ -96,7 +96,9 @@ export class AdminsService {
         where: { phone: dto.phone },
       });
       if (existingPhone) {
-        throw new ConflictException('A user with this phone number already exists');
+        throw new ConflictException(
+          'A user with this phone number already exists',
+        );
       }
     }
 
@@ -230,7 +232,11 @@ export class AdminsService {
       }),
     ]);
 
-    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl('admin', id, 'PROFILE_PHOTO');
+    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl(
+      'admin',
+      id,
+      'PROFILE_PHOTO',
+    );
 
     return {
       ...admin,
@@ -281,7 +287,9 @@ export class AdminsService {
         data: {
           ...(dto.fullName !== undefined && { fullName: dto.fullName }),
           ...(dto.gender !== undefined && { gender: dto.gender }),
-          ...(dto.dateOfBirth !== undefined && { dateOfBirth: dto.dateOfBirth }),
+          ...(dto.dateOfBirth !== undefined && {
+            dateOfBirth: dto.dateOfBirth,
+          }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
           ...(dto.email !== undefined && { email: dto.email }),
           ...(dto.address !== undefined && { address: dto.address }),
@@ -393,17 +401,36 @@ export class AdminsService {
       throw new NotFoundException('Admin profile not found');
     }
 
-    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl('admin', admin.id, 'PROFILE_PHOTO');
+    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl(
+      'admin',
+      admin.id,
+      'PROFILE_PHOTO',
+    );
 
     return { ...admin, profilePhotoUrl };
   }
 
-  async uploadProfilePhoto(adminId: string, file: Express.Multer.File, uploadedBy: string) {
-    const admin = await this.prisma.admin.findUnique({ where: { id: adminId } });
-    if (!admin) throw new NotFoundException(`Admin with id ${adminId} not found`);
+  async uploadProfilePhoto(
+    adminId: string,
+    file: Express.Multer.File,
+    uploadedBy: string,
+  ) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+    if (!admin)
+      throw new NotFoundException(`Admin with id ${adminId} not found`);
 
-    const document = await this.documentsService.upload(file, 'admin', adminId, 'PROFILE_PHOTO', uploadedBy);
-    const profilePhotoUrl = await this.documentsService.getSignedUrl(document.storagePath);
+    const document = await this.documentsService.upload(
+      file,
+      'admin',
+      adminId,
+      'PROFILE_PHOTO',
+      uploadedBy,
+    );
+    const profilePhotoUrl = await this.documentsService.getSignedUrl(
+      document.storagePath,
+    );
 
     return { document, profilePhotoUrl };
   }

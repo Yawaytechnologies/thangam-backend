@@ -42,7 +42,9 @@ export class NotificationsController {
 
   // GET /notifications/latest
   @Get('latest')
-  @ApiOperation({ summary: 'Get latest 10 notifications for the authenticated user' })
+  @ApiOperation({
+    summary: 'Get latest 10 notifications for the authenticated user',
+  })
   @ApiResponse({ status: 200, description: 'Latest notifications' })
   findLatest(@CurrentUser() user: any) {
     return this.notificationsService.findLatest(user.id);
@@ -50,8 +52,14 @@ export class NotificationsController {
 
   // GET /notifications/unread-count
   @Get('unread-count')
-  @ApiOperation({ summary: 'Get unread notification count for the authenticated user' })
-  @ApiResponse({ status: 200, description: 'Unread count', schema: { example: { count: 5 } } })
+  @ApiOperation({
+    summary: 'Get unread notification count for the authenticated user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Unread count',
+    schema: { example: { count: 5 } },
+  })
   async getUnreadCount(@CurrentUser() user: any): Promise<{ count: number }> {
     const count = await this.notificationsService.getUnreadCount(user.id);
     return { count };
@@ -80,10 +88,7 @@ export class NotificationsController {
   @ApiParam({ name: 'id', description: 'Notification ID (UUID)' })
   @ApiResponse({ status: 200, description: 'Notification detail' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: any,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.notificationsService.findOne(id, user.id);
   }
 
@@ -93,10 +98,7 @@ export class NotificationsController {
   @ApiParam({ name: 'id', description: 'Notification ID (UUID)' })
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
-  markRead(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: any,
-  ) {
+  markRead(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.notificationsService.markRead(id, user.id);
   }
 }

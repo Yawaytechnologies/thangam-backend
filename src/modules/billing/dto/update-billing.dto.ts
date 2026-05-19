@@ -20,7 +20,9 @@ export class UpdateBillingDto {
   @IsOptional()
   totalReceived?: number;
 
-  @ApiPropertyOptional({ example: 'Site visit completed, additional documents pending.' })
+  @ApiPropertyOptional({
+    example: 'Site visit completed, additional documents pending.',
+  })
   @IsString()
   @IsOptional()
   operationalNotes?: string;

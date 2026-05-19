@@ -20,7 +20,7 @@ export class NotificationsGateway implements OnGatewayConnection {
     private readonly configService: ConfigService,
   ) {}
 
-  async handleConnection(client: Socket) {
+  handleConnection(client: Socket) {
     try {
       const token =
         client.handshake.auth?.token ||
@@ -43,11 +43,14 @@ export class NotificationsGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('ping')
-  handlePing(@MessageBody() data: any, @ConnectedSocket() client: Socket): string {
+  handlePing(
+    @MessageBody() _data: unknown,
+    @ConnectedSocket() _client: Socket,
+  ): string {
     return 'pong';
   }
 
-  emitToUser(userId: string, event: string, data: any): void {
+  emitToUser(userId: string, event: string, data: unknown): void {
     this.server.to(`user:${userId}`).emit(event, data);
   }
 }

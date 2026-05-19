@@ -8,7 +8,9 @@ export class ImageFilePipe implements PipeTransform {
   transform(file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Image file is required');
     if (!ALLOWED_MIME.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, and WebP images are allowed');
+      throw new BadRequestException(
+        'Only JPEG, PNG, and WebP images are allowed',
+      );
     }
     if (file.size > MAX_BYTES) {
       throw new BadRequestException('Image must be 5 MB or smaller');

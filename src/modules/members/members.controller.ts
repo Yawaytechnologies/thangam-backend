@@ -68,7 +68,10 @@ export class MembersController {
 
   @Get('team')
   @ApiOperation({ summary: 'Get downline team for mobile (hierarchy-scoped)' })
-  getTeamForMobile(@CurrentUser() user: any, @Query() filters: MemberFilterDto) {
+  getTeamForMobile(
+    @CurrentUser() user: any,
+    @Query() filters: MemberFilterDto,
+  ) {
     return this.membersService.getTeamForMobile(user, filters);
   }
 
@@ -87,10 +90,7 @@ export class MembersController {
   @Put(':id')
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update member (SUPER_ADMIN only)' })
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateMemberDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMemberDto) {
     return this.membersService.update(id, dto);
   }
 
@@ -109,7 +109,9 @@ export class MembersController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload profile photo for a member (JPEG/PNG/WebP, max 5 MB)' })
+  @ApiOperation({
+    summary: 'Upload profile photo for a member (JPEG/PNG/WebP, max 5 MB)',
+  })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiBody({
     schema: {

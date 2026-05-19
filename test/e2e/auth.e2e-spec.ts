@@ -31,7 +31,9 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { id: createdUserId } }).catch(() => null);
+    await prisma.user
+      .deleteMany({ where: { id: createdUserId } })
+      .catch(() => null);
     await app.close();
   });
 
@@ -61,7 +63,9 @@ describe('Auth (e2e)', () => {
 
       // refresh_token comes as httpOnly cookie
       const cookies = res.headers['set-cookie'] as string[] | string;
-      const cookieStr = Array.isArray(cookies) ? cookies.join(';') : (cookies ?? '');
+      const cookieStr = Array.isArray(cookies)
+        ? cookies.join(';')
+        : (cookies ?? '');
       expect(cookieStr).toMatch(/refresh_token=/);
 
       accessToken = res.body.data.accessToken;
@@ -111,9 +115,13 @@ describe('Auth (e2e)', () => {
         .expect(200);
 
       const cookies = res.headers['set-cookie'] as string[] | string;
-      const cookieStr = Array.isArray(cookies) ? cookies.join(';') : (cookies ?? '');
+      const cookieStr = Array.isArray(cookies)
+        ? cookies.join(';')
+        : (cookies ?? '');
       // Express clears cookie via expires=epoch or max-age=0
-      expect(cookieStr.toLowerCase()).toMatch(/refresh_token=;|max-age=0|expires=thu, 01 jan 1970/);
+      expect(cookieStr.toLowerCase()).toMatch(
+        /refresh_token=;|max-age=0|expires=thu, 01 jan 1970/,
+      );
     });
   });
 

@@ -4,7 +4,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingStatus } from '@prisma/client';
 
 export class BookingFilterDto {
-  @ApiPropertyOptional({ description: 'Search by bookingId, applicantName, cellNumber, projectName, plotNumber' })
+  @ApiPropertyOptional({
+    description:
+      'Search by bookingId, applicantName, cellNumber, projectName, plotNumber',
+  })
   @IsString()
   @IsOptional()
   search?: string;
@@ -19,7 +22,9 @@ export class BookingFilterDto {
   @IsOptional()
   propertyId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by branch UUID (SUPER_ADMIN only)' })
+  @ApiPropertyOptional({
+    description: 'Filter by branch UUID (SUPER_ADMIN only)',
+  })
   @IsString()
   @IsOptional()
   branchId?: string;

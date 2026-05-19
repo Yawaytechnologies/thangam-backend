@@ -1,9 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  NotificationType,
-  NotificationStatus,
-  Role,
-} from '@prisma/client';
+import { NotificationType, NotificationStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationFilterDto } from './dto/notification-filter.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -41,11 +37,15 @@ export interface CreateNotificationDto {
 @Injectable()
 export class NotificationsService {
   // Gateway is injected via setter to avoid circular dependency
-  private gateway: { emitToUser(userId: string, event: string, data: any): void } | null = null;
+  private gateway: {
+    emitToUser(userId: string, event: string, data: any): void;
+  } | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
 
-  setGateway(gateway: { emitToUser(userId: string, event: string, data: any): void }): void {
+  setGateway(gateway: {
+    emitToUser(userId: string, event: string, data: any): void;
+  }): void {
     this.gateway = gateway;
   }
 
@@ -140,7 +140,11 @@ export class NotificationsService {
 
       if (bookingBranchId) {
         const directors = await this.prisma.member.findMany({
-          where: { branchId: bookingBranchId, role: Role.DIRECTOR, status: 'ACTIVE' },
+          where: {
+            branchId: bookingBranchId,
+            role: Role.DIRECTOR,
+            status: 'ACTIVE',
+          },
           select: { userId: true },
         });
         directors.forEach((d) => recipientUserIds.add(d.userId));
@@ -172,7 +176,11 @@ export class NotificationsService {
         relatedEntityId: notification.relatedEntityId,
       };
       recipientUserIds.forEach((userId) => {
-        this.gateway!.emitToUser(userId, 'notification:new', notificationPayload);
+        this.gateway!.emitToUser(
+          userId,
+          'notification:new',
+          notificationPayload,
+        );
       });
     }
   }
@@ -206,7 +214,16 @@ export class NotificationsService {
   // ─── findAll ──────────────────────────────────────────────────────────────
 
   async findAll(user: any, filters: NotificationFilterDto) {
-    const { search, type, status, branchId, startDate, endDate, page = 1, limit = 20 } = filters;
+    const {
+      search,
+      type,
+      status,
+      branchId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20,
+    } = filters;
     const skip = (page - 1) * limit;
 
     // Build base notification where clause

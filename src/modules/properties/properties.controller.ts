@@ -40,7 +40,9 @@ export class PropertiesController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  @ApiOperation({ summary: 'Get all properties with optional filters and pagination' })
+  @ApiOperation({
+    summary: 'Get all properties with optional filters and pagination',
+  })
   findAll(@Query() filters: PropertyFilterDto) {
     return this.propertiesService.findAll(filters);
   }
@@ -49,10 +51,7 @@ export class PropertiesController {
   @Roles(Role.SUPER_ADMIN)
   @Post()
   @ApiOperation({ summary: 'Create a new property (SUPER_ADMIN only)' })
-  create(
-    @Body() dto: CreatePropertyDto,
-    @CurrentUser('id') userId: string,
-  ) {
+  create(@Body() dto: CreatePropertyDto, @CurrentUser('id') userId: string) {
     return this.propertiesService.create(dto, userId);
   }
 
@@ -96,7 +95,9 @@ export class PropertiesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
   @Patch(':id/workflow')
-  @ApiOperation({ summary: 'Update property workflow status (SUPER_ADMIN only)' })
+  @ApiOperation({
+    summary: 'Update property workflow status (SUPER_ADMIN only)',
+  })
   @ApiParam({ name: 'id', description: 'Property UUID' })
   updateWorkflow(
     @Param('id') id: string,
@@ -111,7 +112,9 @@ export class PropertiesController {
   @Post(':id/images')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload a property image (JPEG/PNG/WebP, max 5 MB)' })
+  @ApiOperation({
+    summary: 'Upload a property image (JPEG/PNG/WebP, max 5 MB)',
+  })
   @ApiParam({ name: 'id', description: 'Property UUID' })
   @ApiBody({
     schema: {

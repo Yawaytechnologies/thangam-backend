@@ -135,7 +135,9 @@ export class MembersService {
     if (user.role === Role.ADMIN) {
       branchId = user.admin?.branchId;
       if (!branchId) {
-        throw new BadRequestException('Admin is not associated with any branch');
+        throw new BadRequestException(
+          'Admin is not associated with any branch',
+        );
       }
     } else if (user.role === Role.SUPER_ADMIN) {
       branchId = dto.branchId ?? '';
@@ -143,11 +145,15 @@ export class MembersService {
         throw new BadRequestException('branchId is required for SUPER_ADMIN');
       }
     } else {
-      throw new BadRequestException('You do not have permission to create members');
+      throw new BadRequestException(
+        'You do not have permission to create members',
+      );
     }
 
     // Validate branch exists
-    const branch = await this.prisma.branch.findUnique({ where: { id: branchId } });
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+    });
     if (!branch) throw new NotFoundException('Branch not found');
 
     // Uniqueness checks
@@ -167,7 +173,8 @@ export class MembersService {
       const existingAadhaar = await this.prisma.member.findFirst({
         where: { aadhaarNumber: dto.aadhaarNumber },
       });
-      if (existingAadhaar) throw new ConflictException('aadhaarNumber already exists');
+      if (existingAadhaar)
+        throw new ConflictException('aadhaarNumber already exists');
     }
 
     if (dto.panNumber) {
@@ -182,7 +189,8 @@ export class MembersService {
       const reportsTo = await this.prisma.member.findUnique({
         where: { id: dto.reportsToId },
       });
-      if (!reportsTo) throw new NotFoundException('reportsToId member not found');
+      if (!reportsTo)
+        throw new NotFoundException('reportsToId member not found');
     }
 
     // Generate member sequence
@@ -266,7 +274,7 @@ export class MembersService {
 
   // ─── findOne ──────────────────────────────────────────────────────────────
 
-  async findOne(id: string, user: any) {
+  async findOne(id: string, _user: unknown) {
     const member = await this.prisma.member.findUnique({
       where: { id },
       include: {
@@ -310,23 +318,33 @@ export class MembersService {
     if (!member) throw new NotFoundException('Member not found');
 
     // Downline counts per role
-    const [
-      directorCount,
-      edCount,
-      ddCount,
-      smCount,
-      bmCount,
-      agentCount,
-    ] = await Promise.all([
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.DIRECTOR } }),
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.EXECUTIVE_DIRECTOR } }),
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.DEPUTY_DIRECTOR } }),
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.SENIOR_MANAGER } }),
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.BUSINESS_MANAGER } }),
-      this.prisma.member.count({ where: { reportsToId: id, role: Role.AGENT } }),
-    ]);
+    const [directorCount, edCount, ddCount, smCount, bmCount, agentCount] =
+      await Promise.all([
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.DIRECTOR },
+        }),
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.EXECUTIVE_DIRECTOR },
+        }),
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.DEPUTY_DIRECTOR },
+        }),
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.SENIOR_MANAGER },
+        }),
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.BUSINESS_MANAGER },
+        }),
+        this.prisma.member.count({
+          where: { reportsToId: id, role: Role.AGENT },
+        }),
+      ]);
 
-    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl('member', id, 'PROFILE_PHOTO');
+    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl(
+      'member',
+      id,
+      'PROFILE_PHOTO',
+    );
 
     return {
       ...member,
@@ -338,7 +356,8 @@ export class MembersService {
         smCount,
         bmCount,
         agentCount,
-        total: directorCount + edCount + ddCount + smCount + bmCount + agentCount,
+        total:
+          directorCount + edCount + ddCount + smCount + bmCount + agentCount,
       },
     };
   }
@@ -405,10 +424,14 @@ export class MembersService {
             dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           }),
           ...(dto.bloodGroup !== undefined && { bloodGroup: dto.bloodGroup }),
-          ...(dto.qualification !== undefined && { qualification: dto.qualification }),
+          ...(dto.qualification !== undefined && {
+            qualification: dto.qualification,
+          }),
           ...(dto.experience !== undefined && { experience: dto.experience }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
-          ...(dto.alternatePhone !== undefined && { alternatePhone: dto.alternatePhone }),
+          ...(dto.alternatePhone !== undefined && {
+            alternatePhone: dto.alternatePhone,
+          }),
           ...(dto.email !== undefined && { email: dto.email ?? null }),
           ...(dto.address !== undefined && { address: dto.address }),
           ...(dto.city !== undefined && { city: dto.city }),
@@ -416,19 +439,37 @@ export class MembersService {
           ...(dto.state !== undefined && { state: dto.state }),
           ...(dto.pincode !== undefined && { pincode: dto.pincode }),
           ...(dto.panNumber !== undefined && { panNumber: dto.panNumber }),
-          ...(dto.aadhaarNumber !== undefined && { aadhaarNumber: dto.aadhaarNumber }),
-          ...(dto.voterIdNumber !== undefined && { voterIdNumber: dto.voterIdNumber }),
-          ...(dto.drivingLicense !== undefined && { drivingLicense: dto.drivingLicense }),
+          ...(dto.aadhaarNumber !== undefined && {
+            aadhaarNumber: dto.aadhaarNumber,
+          }),
+          ...(dto.voterIdNumber !== undefined && {
+            voterIdNumber: dto.voterIdNumber,
+          }),
+          ...(dto.drivingLicense !== undefined && {
+            drivingLicense: dto.drivingLicense,
+          }),
           ...(dto.role !== undefined && { role: dto.role }),
           ...(dto.introName !== undefined && { introName: dto.introName }),
-          ...(dto.reportsToId !== undefined && { reportsToId: dto.reportsToId ?? null }),
+          ...(dto.reportsToId !== undefined && {
+            reportsToId: dto.reportsToId ?? null,
+          }),
           ...(dto.codeNumber !== undefined && { codeNumber: dto.codeNumber }),
-          ...(dto.nomineeName !== undefined && { nomineeName: dto.nomineeName }),
-          ...(dto.nomineeRelation !== undefined && { nomineeRelation: dto.nomineeRelation }),
-          ...(dto.nomineePhone !== undefined && { nomineePhone: dto.nomineePhone }),
+          ...(dto.nomineeName !== undefined && {
+            nomineeName: dto.nomineeName,
+          }),
+          ...(dto.nomineeRelation !== undefined && {
+            nomineeRelation: dto.nomineeRelation,
+          }),
+          ...(dto.nomineePhone !== undefined && {
+            nomineePhone: dto.nomineePhone,
+          }),
           ...(dto.bankName !== undefined && { bankName: dto.bankName }),
-          ...(dto.accountHolder !== undefined && { accountHolder: dto.accountHolder }),
-          ...(dto.accountNumber !== undefined && { accountNumber: dto.accountNumber }),
+          ...(dto.accountHolder !== undefined && {
+            accountHolder: dto.accountHolder,
+          }),
+          ...(dto.accountNumber !== undefined && {
+            accountNumber: dto.accountNumber,
+          }),
           ...(dto.ifscCode !== undefined && { ifscCode: dto.ifscCode }),
           ...(dto.bankBranch !== undefined && { bankBranch: dto.bankBranch }),
           ...(dto.status !== undefined && { status: dto.status }),
@@ -574,7 +615,9 @@ export class MembersService {
     let profilePhotoUrl: string | null = null;
     if (profilePhoto) {
       try {
-        profilePhotoUrl = await this.documentsService.getSignedUrl(profilePhoto.storagePath);
+        profilePhotoUrl = await this.documentsService.getSignedUrl(
+          profilePhoto.storagePath,
+        );
       } catch {
         profilePhotoUrl = null;
       }
@@ -592,12 +635,26 @@ export class MembersService {
     };
   }
 
-  async uploadProfilePhoto(memberId: string, file: Express.Multer.File, uploadedBy: string) {
-    const member = await this.prisma.member.findUnique({ where: { id: memberId } });
+  async uploadProfilePhoto(
+    memberId: string,
+    file: Express.Multer.File,
+    uploadedBy: string,
+  ) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+    });
     if (!member) throw new NotFoundException('Member not found');
 
-    const document = await this.documentsService.upload(file, 'member', memberId, 'PROFILE_PHOTO', uploadedBy);
-    const profilePhotoUrl = await this.documentsService.getSignedUrl(document.storagePath);
+    const document = await this.documentsService.upload(
+      file,
+      'member',
+      memberId,
+      'PROFILE_PHOTO',
+      uploadedBy,
+    );
+    const profilePhotoUrl = await this.documentsService.getSignedUrl(
+      document.storagePath,
+    );
 
     return { document, profilePhotoUrl };
   }

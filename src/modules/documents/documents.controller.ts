@@ -38,8 +38,15 @@ export class DocumentsController {
       type: 'object',
       required: ['file', 'entityType', 'entityId', 'documentType'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'File to upload' },
-        entityType: { type: 'string', description: 'Entity type (e.g. property, member)' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'File to upload',
+        },
+        entityType: {
+          type: 'string',
+          description: 'Entity type (e.g. property, member)',
+        },
         entityId: { type: 'string', description: 'UUID of the entity' },
         documentType: {
           type: 'string',
@@ -75,7 +82,10 @@ export class DocumentsController {
 
   @Get('entity/:entityType/:entityId')
   @ApiOperation({ summary: 'Get all documents for a given entity' })
-  @ApiParam({ name: 'entityType', description: 'Entity type (e.g. property, member)' })
+  @ApiParam({
+    name: 'entityType',
+    description: 'Entity type (e.g. property, member)',
+  })
   @ApiParam({ name: 'entityId', description: 'UUID of the entity' })
   getDocumentsForEntity(
     @Param('entityType') entityType: string,

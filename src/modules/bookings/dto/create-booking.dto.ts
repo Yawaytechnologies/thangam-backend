@@ -147,14 +147,17 @@ export class CreateBookingDto {
   @IsOptional()
   directorName?: string;
 
-  @ApiPropertyOptional({ example: 'https://storage.example.com/signatures/sig_001.png' })
+  @ApiPropertyOptional({
+    example: 'https://storage.example.com/signatures/sig_001.png',
+  })
   @IsString()
   @IsOptional()
   signatureUrl?: string;
 
   @ApiPropertyOptional({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'Required for SUPER_ADMIN — branch to associate the booking with',
+    description:
+      'Required for SUPER_ADMIN — branch to associate the booking with',
   })
   @IsUUID()
   @IsOptional()

@@ -4,7 +4,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingStatus, PaymentMethod } from '@prisma/client';
 
 export class BillingFilterDto {
-  @ApiPropertyOptional({ description: 'Search by billingId, bookingId, buyerName, projectName, plotNumber' })
+  @ApiPropertyOptional({
+    description:
+      'Search by billingId, bookingId, buyerName, projectName, plotNumber',
+  })
   @IsString()
   @IsOptional()
   search?: string;
@@ -19,7 +22,9 @@ export class BillingFilterDto {
   @IsOptional()
   paymentMethod?: PaymentMethod;
 
-  @ApiPropertyOptional({ description: 'Filter by branch UUID (SUPER_ADMIN only)' })
+  @ApiPropertyOptional({
+    description: 'Filter by branch UUID (SUPER_ADMIN only)',
+  })
   @IsString()
   @IsOptional()
   branchId?: string;

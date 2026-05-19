@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTopPerformerDto } from './dto/create-top-performer.dto';
 import { ReorderTopPerformersDto } from './dto/reorder-top-performers.dto';
@@ -93,8 +92,11 @@ export class TopPerformersService {
   // ─── update ───────────────────────────────────────────────────────────────
 
   async update(id: string, dto: Partial<CreateTopPerformerDto>) {
-    const existing = await this.prisma.topPerformer.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Top performer record not found');
+    const existing = await this.prisma.topPerformer.findUnique({
+      where: { id },
+    });
+    if (!existing)
+      throw new NotFoundException('Top performer record not found');
 
     if (dto.memberId) {
       const member = await this.prisma.member.findUnique({
@@ -109,9 +111,13 @@ export class TopPerformersService {
         ...(dto.memberId !== undefined && { memberId: dto.memberId }),
         ...(dto.role !== undefined && { role: dto.role }),
         ...(dto.rank !== undefined && { rank: dto.rank }),
-        ...(dto.displayOrder !== undefined && { displayOrder: dto.displayOrder }),
+        ...(dto.displayOrder !== undefined && {
+          displayOrder: dto.displayOrder,
+        }),
         ...(dto.taggedCount !== undefined && { taggedCount: dto.taggedCount }),
-        ...(dto.propertiesCount !== undefined && { propertiesCount: dto.propertiesCount }),
+        ...(dto.propertiesCount !== undefined && {
+          propertiesCount: dto.propertiesCount,
+        }),
       },
       include: {
         member: {
@@ -133,8 +139,11 @@ export class TopPerformersService {
   // ─── remove ───────────────────────────────────────────────────────────────
 
   async remove(id: string) {
-    const existing = await this.prisma.topPerformer.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Top performer record not found');
+    const existing = await this.prisma.topPerformer.findUnique({
+      where: { id },
+    });
+    if (!existing)
+      throw new NotFoundException('Top performer record not found');
 
     await this.prisma.topPerformer.delete({ where: { id } });
     return { message: 'Top performer deleted successfully' };

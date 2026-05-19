@@ -45,7 +45,9 @@ export class TopPerformersController {
   // ─── Public-facing (all JWT roles can view) ────────────────────────────
 
   @Get('super-admin/dashboard/top-performers')
-  @ApiOperation({ summary: 'Get top performers grouped by role with freeze state' })
+  @ApiOperation({
+    summary: 'Get top performers grouped by role with freeze state',
+  })
   findAll() {
     return this.topPerformersService.findAll();
   }
@@ -62,7 +64,9 @@ export class TopPerformersController {
 
   @Post('top-performers')
   @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Create a new top performer entry (SUPER_ADMIN only)' })
+  @ApiOperation({
+    summary: 'Create a new top performer entry (SUPER_ADMIN only)',
+  })
   create(@Body() dto: CreateTopPerformerDto) {
     return this.topPerformersService.create(dto);
   }
@@ -96,7 +100,9 @@ export class TopPerformersController {
 
   @Patch('settings/top-performers/freeze')
   @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Toggle freeze state for top performers (SUPER_ADMIN only)' })
+  @ApiOperation({
+    summary: 'Toggle freeze state for top performers (SUPER_ADMIN only)',
+  })
   @ApiBody({ type: ToggleFreezeDto })
   toggleFreeze(@Body() body: ToggleFreezeDto) {
     return this.topPerformersService.toggleFreeze(body.frozen);

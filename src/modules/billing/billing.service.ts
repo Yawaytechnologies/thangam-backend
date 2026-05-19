@@ -54,9 +54,21 @@ export class BillingService {
         OR: [
           { billingId: { contains: searchTerm, mode: 'insensitive' } },
           { buyerName: { contains: searchTerm, mode: 'insensitive' } },
-          { booking: { bookingId: { contains: searchTerm, mode: 'insensitive' } } },
-          { booking: { projectName: { contains: searchTerm, mode: 'insensitive' } } },
-          { booking: { plotNumber: { contains: searchTerm, mode: 'insensitive' } } },
+          {
+            booking: {
+              bookingId: { contains: searchTerm, mode: 'insensitive' },
+            },
+          },
+          {
+            booking: {
+              projectName: { contains: searchTerm, mode: 'insensitive' },
+            },
+          },
+          {
+            booking: {
+              plotNumber: { contains: searchTerm, mode: 'insensitive' },
+            },
+          },
         ],
       });
     }
@@ -99,12 +111,19 @@ export class BillingService {
       });
 
       if (!booking) {
-        throw new NotFoundException(`Booking with id ${dto.bookingId} not found`);
+        throw new NotFoundException(
+          `Booking with id ${dto.bookingId} not found`,
+        );
       }
 
       // ADMIN branch check
-      if (user.role === Role.ADMIN && booking.branchId !== user.admin?.branchId) {
-        throw new ForbiddenException('You do not have permission to create billing for this booking');
+      if (
+        user.role === Role.ADMIN &&
+        booking.branchId !== user.admin?.branchId
+      ) {
+        throw new ForbiddenException(
+          'You do not have permission to create billing for this booking',
+        );
       }
 
       // 2. Auto-generate billingId
@@ -207,13 +226,21 @@ export class BillingService {
     }
 
     // ADMIN cannot edit completed billings
-    if (user.role === Role.ADMIN && billing.status === BillingStatus.COMPLETED) {
+    if (
+      user.role === Role.ADMIN &&
+      billing.status === BillingStatus.COMPLETED
+    ) {
       throw new ForbiddenException('Cannot edit a completed billing record');
     }
 
     // ADMIN branch restriction
-    if (user.role === Role.ADMIN && billing.booking.branchId !== user.admin?.branchId) {
-      throw new ForbiddenException('You do not have permission to edit this billing record');
+    if (
+      user.role === Role.ADMIN &&
+      billing.booking.branchId !== user.admin?.branchId
+    ) {
+      throw new ForbiddenException(
+        'You do not have permission to edit this billing record',
+      );
     }
 
     // Recalculate amountInWords if amountInNumbers changes
@@ -225,13 +252,25 @@ export class BillingService {
     return this.prisma.billing.update({
       where: { id },
       data: {
-        ...(dto.paymentMethod !== undefined && { paymentMethod: dto.paymentMethod }),
-        ...(dto.amountInNumbers !== undefined && { amountInNumbers: dto.amountInNumbers }),
+        ...(dto.paymentMethod !== undefined && {
+          paymentMethod: dto.paymentMethod,
+        }),
+        ...(dto.amountInNumbers !== undefined && {
+          amountInNumbers: dto.amountInNumbers,
+        }),
         ...(amountInWords !== undefined && { amountInWords }),
-        ...(dto.totalReceived !== undefined && { totalReceived: dto.totalReceived }),
-        ...(dto.operationalNotes !== undefined && { operationalNotes: dto.operationalNotes }),
-        ...(dto.settlementNotes !== undefined && { settlementNotes: dto.settlementNotes }),
-        ...(dto.termsConditions !== undefined && { termsConditions: dto.termsConditions }),
+        ...(dto.totalReceived !== undefined && {
+          totalReceived: dto.totalReceived,
+        }),
+        ...(dto.operationalNotes !== undefined && {
+          operationalNotes: dto.operationalNotes,
+        }),
+        ...(dto.settlementNotes !== undefined && {
+          settlementNotes: dto.settlementNotes,
+        }),
+        ...(dto.termsConditions !== undefined && {
+          termsConditions: dto.termsConditions,
+        }),
         ...(dto.status !== undefined && { status: dto.status }),
       },
       include: {
@@ -292,7 +331,15 @@ export class BillingService {
         booking: {
           include: {
             property: true,
-            branch: { select: { id: true, name: true, branchCode: true, address: true, phone: true } },
+            branch: {
+              select: {
+                id: true,
+                name: true,
+                branchCode: true,
+                address: true,
+                phone: true,
+              },
+            },
           },
         },
         workflowHistory: { orderBy: { createdAt: 'asc' } },

@@ -41,7 +41,9 @@ export class AdminsController {
 
   @Get('admins')
   @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get all admins with pagination and filters (SUPER_ADMIN only)' })
+  @ApiOperation({
+    summary: 'Get all admins with pagination and filters (SUPER_ADMIN only)',
+  })
   findAll(@Query() filters: AdminFilterDto) {
     return this.adminsService.findAll(filters);
   }
@@ -49,10 +51,7 @@ export class AdminsController {
   @Post('admins')
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create a new admin (SUPER_ADMIN only)' })
-  create(
-    @Body() dto: CreateAdminDto,
-    @CurrentUser('id') userId: string,
-  ) {
+  create(@Body() dto: CreateAdminDto, @CurrentUser('id') userId: string) {
     return this.adminsService.create(dto, userId);
   }
 
@@ -68,10 +67,7 @@ export class AdminsController {
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update an admin (SUPER_ADMIN only)' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateAdminDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAdminDto) {
     return this.adminsService.update(id, dto);
   }
 
@@ -97,7 +93,9 @@ export class AdminsController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload profile photo for an admin (JPEG/PNG/WebP, max 5 MB)' })
+  @ApiOperation({
+    summary: 'Upload profile photo for an admin (JPEG/PNG/WebP, max 5 MB)',
+  })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiBody({
     schema: {

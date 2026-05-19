@@ -23,9 +23,16 @@ const mockPrisma = {
   $transaction: mockTransaction,
 };
 
-const mockPdfService = { generateBookingPdf: jest.fn(), generatePdf: jest.fn() };
+const mockPdfService = {
+  generateBookingPdf: jest.fn(),
+  generatePdf: jest.fn(),
+};
 
-const adminUser = { id: 'admin-1', role: Role.ADMIN, admin: { branchId: 'branch-1' } };
+const adminUser = {
+  id: 'admin-1',
+  role: Role.ADMIN,
+  admin: { branchId: 'branch-1' },
+};
 const superAdminUser = { id: 'super-1', role: Role.SUPER_ADMIN, admin: null };
 
 describe('BookingsService', () => {
@@ -77,9 +84,13 @@ describe('BookingsService', () => {
     });
 
     it('applies status filter', async () => {
-      await service.findAll(superAdminUser, { status: BookingStatus.TOKEN_RECEIVED });
+      await service.findAll(superAdminUser, {
+        status: BookingStatus.TOKEN_RECEIVED,
+      });
       const call = mockPrisma.booking.findMany.mock.calls[0][0];
-      expect(call.where).toMatchObject({ status: BookingStatus.TOKEN_RECEIVED });
+      expect(call.where).toMatchObject({
+        status: BookingStatus.TOKEN_RECEIVED,
+      });
     });
 
     it('builds OR search clause for text search', async () => {
@@ -94,7 +105,10 @@ describe('BookingsService', () => {
       mockPrisma.booking.findMany.mockResolvedValue(mockBookings);
       mockPrisma.booking.count.mockResolvedValue(1);
 
-      const result = await service.findAll(superAdminUser, { page: 2, limit: 10 });
+      const result = await service.findAll(superAdminUser, {
+        page: 2,
+        limit: 10,
+      });
 
       expect(result).toMatchObject({ total: 1, page: 2, limit: 10 });
       expect(result.data).toHaveLength(1);
@@ -123,17 +137,24 @@ describe('BookingsService', () => {
 
     it('throws BadRequestException when ADMIN has no associated branch', async () => {
       const noBranchAdmin = { id: 'a1', role: Role.ADMIN, admin: {} };
-      await expect(service.create(dto as any, noBranchAdmin)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto as any, noBranchAdmin)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws BadRequestException when SUPER_ADMIN omits branchId', async () => {
-      await expect(service.create(dto as any, superAdminUser)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto as any, superAdminUser)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws NotFoundException when property does not exist', async () => {
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
-          property: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
+          property: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            update: jest.fn(),
+          },
           booking: { count: jest.fn().mockResolvedValue(0), create: jest.fn() },
           bookingPayment: { createMany: jest.fn() },
           workflowHistory: { create: jest.fn() },
@@ -146,24 +167,41 @@ describe('BookingsService', () => {
     });
 
     it('creates booking with BOOKING_INITIATED status by default', async () => {
-      const createdBooking = { id: 'b1', bookingId: 'STH-BK-0001', status: BookingStatus.BOOKING_INITIATED };
+      const createdBooking = {
+        id: 'b1',
+        bookingId: 'STH-BK-0001',
+        status: BookingStatus.BOOKING_INITIATED,
+      };
       const txCreate = jest.fn().mockResolvedValue(createdBooking);
-      const txFindUnique = jest.fn().mockResolvedValue({ ...createdBooking, payments: [], denominations: [] });
+      const txFindUnique = jest.fn().mockResolvedValue({
+        ...createdBooking,
+        payments: [],
+        denominations: [],
+      });
 
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
-          property: { findUnique: jest.fn().mockResolvedValue({ id: 'prop-1' }), update: jest.fn() },
-          booking: { count: jest.fn().mockResolvedValue(0), create: txCreate, findUnique: txFindUnique },
+          property: {
+            findUnique: jest.fn().mockResolvedValue({ id: 'prop-1' }),
+            update: jest.fn(),
+          },
+          booking: {
+            count: jest.fn().mockResolvedValue(0),
+            create: txCreate,
+            findUnique: txFindUnique,
+          },
           bookingPayment: { createMany: jest.fn() },
           workflowHistory: { create: jest.fn() },
         }),
       );
 
-      await service.create({ ...dto, branchId: 'branch-1' } as any, superAdminUser);
+      await service.create({ ...dto, branchId: 'branch-1' }, superAdminUser);
 
       expect(txCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: BookingStatus.BOOKING_INITIATED }),
+          data: expect.objectContaining({
+            status: BookingStatus.BOOKING_INITIATED,
+          }),
         }),
       );
     });
@@ -175,7 +213,11 @@ describe('BookingsService', () => {
     it('throws NotFoundException when booking not found', async () => {
       mockPrisma.booking.findUnique.mockResolvedValue(null);
       await expect(
-        service.updateStatus('nonexistent', BookingStatus.TOKEN_RECEIVED, 'user-1'),
+        service.updateStatus(
+          'nonexistent',
+          BookingStatus.TOKEN_RECEIVED,
+          'user-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -188,7 +230,12 @@ describe('BookingsService', () => {
       mockPrisma.booking.findUnique.mockResolvedValue(existingBooking);
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
-          booking: { update: jest.fn().mockResolvedValue({ ...existingBooking, status: BookingStatus.TOKEN_RECEIVED }) },
+          booking: {
+            update: jest.fn().mockResolvedValue({
+              ...existingBooking,
+              status: BookingStatus.TOKEN_RECEIVED,
+            }),
+          },
           property: { update: jest.fn() },
           workflowHistory: { create: jest.fn() },
         }),

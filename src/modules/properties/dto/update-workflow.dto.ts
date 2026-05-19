@@ -8,7 +8,9 @@ export class UpdateWorkflowDto {
   @IsNotEmpty()
   workflowStatus: WorkflowStatus;
 
-  @ApiPropertyOptional({ description: 'Optional remarks for the status change' })
+  @ApiPropertyOptional({
+    description: 'Optional remarks for the status change',
+  })
   @IsString()
   @IsOptional()
   remarks?: string;

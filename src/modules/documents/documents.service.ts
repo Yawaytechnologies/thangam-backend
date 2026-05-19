@@ -18,8 +18,11 @@ export class DocumentsService {
     private readonly configService: ConfigService,
   ) {
     const supabaseUrl = this.configService.get<string>('supabase.url');
-    const serviceRoleKey = this.configService.get<string>('supabase.serviceRoleKey');
-    this.bucket = this.configService.get<string>('supabase.bucket') ?? 'sth-files';
+    const serviceRoleKey = this.configService.get<string>(
+      'supabase.serviceRoleKey',
+    );
+    this.bucket =
+      this.configService.get<string>('supabase.bucket') ?? 'sth-files';
 
     this.supabase = createClient(supabaseUrl!, serviceRoleKey!);
   }

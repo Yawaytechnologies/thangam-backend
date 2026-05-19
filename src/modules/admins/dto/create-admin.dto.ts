@@ -22,7 +22,10 @@ export class CreateAdminDto {
   @IsOptional()
   gender?: string;
 
-  @ApiPropertyOptional({ example: '1985-06-15', description: 'Date of birth (ISO string)' })
+  @ApiPropertyOptional({
+    example: '1985-06-15',
+    description: 'Date of birth (ISO string)',
+  })
   @Transform(({ value }) => (value ? new Date(value) : undefined))
   @IsOptional()
   dateOfBirth?: Date;

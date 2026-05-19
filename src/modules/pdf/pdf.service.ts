@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
-import { buildBookingFormHtml, BookingPdfData } from './templates/booking-form.template';
-import { buildEstimateCopyHtml, EstimatePdfData } from './templates/estimate-copy.template';
+import {
+  buildBookingFormHtml,
+  BookingPdfData,
+} from './templates/booking-form.template';
+import {
+  buildEstimateCopyHtml,
+  EstimatePdfData,
+} from './templates/estimate-copy.template';
 
 @Injectable()
 export class PdfService {

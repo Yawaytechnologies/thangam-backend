@@ -30,12 +30,20 @@ export class CreateTopPerformerDto {
   @Min(0)
   displayOrder: number;
 
-  @ApiProperty({ description: 'Number of tagged members', default: 0, required: false })
+  @ApiProperty({
+    description: 'Number of tagged members',
+    default: 0,
+    required: false,
+  })
   @IsNumber()
   @Min(0)
   taggedCount: number = 0;
 
-  @ApiProperty({ description: 'Number of properties handled', default: 0, required: false })
+  @ApiProperty({
+    description: 'Number of properties handled',
+    default: 0,
+    required: false,
+  })
   @IsNumber()
   @Min(0)
   propertiesCount: number = 0;

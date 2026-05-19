@@ -50,7 +50,10 @@ export class CreateBillingDto {
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
-  @ApiProperty({ example: 250000, description: 'Amount in numbers; amountInWords is auto-calculated' })
+  @ApiProperty({
+    example: 250000,
+    description: 'Amount in numbers; amountInWords is auto-calculated',
+  })
   @IsNumber()
   @Min(0)
   amountInNumbers: number;
@@ -60,13 +63,18 @@ export class CreateBillingDto {
   @Min(0)
   totalReceived: number;
 
-  @ApiPropertyOptional({ example: 0, description: 'Total balance remaining; defaults to 0 if not provided' })
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Total balance remaining; defaults to 0 if not provided',
+  })
   @IsNumber()
   @Min(0)
   @IsOptional()
   totalBalance?: number;
 
-  @ApiPropertyOptional({ example: 'Site visit completed, documents submitted.' })
+  @ApiPropertyOptional({
+    example: 'Site visit completed, documents submitted.',
+  })
   @IsString()
   @IsOptional()
   operationalNotes?: string;
@@ -81,7 +89,9 @@ export class CreateBillingDto {
   @IsOptional()
   termsConditions?: string;
 
-  @ApiPropertyOptional({ example: 'https://storage.example.com/signatures/sig_001.png' })
+  @ApiPropertyOptional({
+    example: 'https://storage.example.com/signatures/sig_001.png',
+  })
   @IsString()
   @IsOptional()
   signatureUrl?: string;

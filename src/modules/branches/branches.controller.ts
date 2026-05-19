@@ -43,10 +43,7 @@ export class BranchesController {
   @Post()
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create a new branch' })
-  create(
-    @Body() dto: CreateBranchDto,
-    @CurrentUser('id') userId: string,
-  ) {
+  create(@Body() dto: CreateBranchDto, @CurrentUser('id') userId: string) {
     return this.branchesService.create(dto, userId);
   }
 
@@ -62,10 +59,7 @@ export class BranchesController {
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update a branch' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateBranchDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBranchDto) {
     return this.branchesService.update(id, dto);
   }
 

@@ -20,7 +20,8 @@ const BOOKING_TO_WORKFLOW: Record<BookingStatus, WorkflowStatus> = {
   [BookingStatus.TOKEN_RECEIVED]: WorkflowStatus.TOKEN_RECEIVED,
   [BookingStatus.ADVANCE_PAYMENT]: WorkflowStatus.ADVANCE_PAYMENT,
   [BookingStatus.REGISTRATION_PENDING]: WorkflowStatus.REGISTRATION_PENDING,
-  [BookingStatus.FINAL_SETTLEMENT_PENDING]: WorkflowStatus.FINAL_SETTLEMENT_PENDING,
+  [BookingStatus.FINAL_SETTLEMENT_PENDING]:
+    WorkflowStatus.FINAL_SETTLEMENT_PENDING,
   [BookingStatus.COMPLETED]: WorkflowStatus.COMPLETED,
   [BookingStatus.CANCELLED]: WorkflowStatus.AVAILABLE,
 };
@@ -111,7 +112,9 @@ export class BookingsService {
     let branchId: string;
     if (user.role === Role.ADMIN) {
       if (!user.admin?.branchId) {
-        throw new BadRequestException('Admin does not have an associated branch');
+        throw new BadRequestException(
+          'Admin does not have an associated branch',
+        );
       }
       branchId = user.admin.branchId;
     } else {
@@ -130,7 +133,9 @@ export class BookingsService {
         where: { id: dto.propertyId },
       });
       if (!property) {
-        throw new NotFoundException(`Property with id ${dto.propertyId} not found`);
+        throw new NotFoundException(
+          `Property with id ${dto.propertyId} not found`,
+        );
       }
 
       // 2. Auto-generate bookingId
@@ -275,35 +280,60 @@ export class BookingsService {
     }
 
     // ADMIN cannot edit completed bookings
-    if (user.role === Role.ADMIN && booking.status === BookingStatus.COMPLETED) {
+    if (
+      user.role === Role.ADMIN &&
+      booking.status === BookingStatus.COMPLETED
+    ) {
       throw new ForbiddenException('Cannot edit a completed booking');
     }
 
     // ADMIN branch restriction
     if (user.role === Role.ADMIN && booking.branchId !== user.admin?.branchId) {
-      throw new ForbiddenException('You do not have permission to edit this booking');
+      throw new ForbiddenException(
+        'You do not have permission to edit this booking',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
       // Update booking fields
-      const updated = await tx.booking.update({
+      await tx.booking.update({
         where: { id },
         data: {
-          ...(dto.applicantName !== undefined && { applicantName: dto.applicantName }),
+          ...(dto.applicantName !== undefined && {
+            applicantName: dto.applicantName,
+          }),
           ...(dto.relation !== undefined && { relation: dto.relation }),
-          ...(dto.applicantAddress !== undefined && { applicantAddress: dto.applicantAddress }),
+          ...(dto.applicantAddress !== undefined && {
+            applicantAddress: dto.applicantAddress,
+          }),
           ...(dto.pinCode !== undefined && { pinCode: dto.pinCode }),
           ...(dto.cellNumber !== undefined && { cellNumber: dto.cellNumber }),
-          ...(dto.dateOfBirth !== undefined && { dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null }),
-          ...(dto.weddingDay !== undefined && { weddingDay: dto.weddingDay ? new Date(dto.weddingDay) : null }),
-          ...(dto.projectName !== undefined && { projectName: dto.projectName }),
+          ...(dto.dateOfBirth !== undefined && {
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          }),
+          ...(dto.weddingDay !== undefined && {
+            weddingDay: dto.weddingDay ? new Date(dto.weddingDay) : null,
+          }),
+          ...(dto.projectName !== undefined && {
+            projectName: dto.projectName,
+          }),
           ...(dto.plotNumber !== undefined && { plotNumber: dto.plotNumber }),
           ...(dto.squareFeet !== undefined && { squareFeet: dto.squareFeet }),
-          ...(dto.bookingDate !== undefined && { bookingDate: new Date(dto.bookingDate) }),
-          ...(dto.edDdSmBmName !== undefined && { edDdSmBmName: dto.edDdSmBmName }),
-          ...(dto.referenceCode !== undefined && { referenceCode: dto.referenceCode }),
-          ...(dto.directorName !== undefined && { directorName: dto.directorName }),
-          ...(dto.signatureUrl !== undefined && { signatureUrl: dto.signatureUrl }),
+          ...(dto.bookingDate !== undefined && {
+            bookingDate: new Date(dto.bookingDate),
+          }),
+          ...(dto.edDdSmBmName !== undefined && {
+            edDdSmBmName: dto.edDdSmBmName,
+          }),
+          ...(dto.referenceCode !== undefined && {
+            referenceCode: dto.referenceCode,
+          }),
+          ...(dto.directorName !== undefined && {
+            directorName: dto.directorName,
+          }),
+          ...(dto.signatureUrl !== undefined && {
+            signatureUrl: dto.signatureUrl,
+          }),
         },
       });
 
@@ -422,7 +452,13 @@ export class BookingsService {
       include: {
         property: true,
         branch: {
-          select: { id: true, name: true, branchCode: true, address: true, phone: true },
+          select: {
+            id: true,
+            name: true,
+            branchCode: true,
+            address: true,
+            phone: true,
+          },
         },
         payments: true,
         denominations: true,
@@ -442,8 +478,12 @@ export class BookingsService {
       applicantAddress: booking.applicantAddress ?? '',
       pinCode: booking.pinCode ?? '',
       cellNumber: booking.cellNumber,
-      dateOfBirth: booking.dateOfBirth ? booking.dateOfBirth.toISOString().split('T')[0] : undefined,
-      weddingDay: booking.weddingDay ? booking.weddingDay.toISOString().split('T')[0] : undefined,
+      dateOfBirth: booking.dateOfBirth
+        ? booking.dateOfBirth.toISOString().split('T')[0]
+        : undefined,
+      weddingDay: booking.weddingDay
+        ? booking.weddingDay.toISOString().split('T')[0]
+        : undefined,
       projectName: booking.projectName,
       plotNumber: booking.plotNumber,
       squareFeet: booking.squareFeet ?? undefined,

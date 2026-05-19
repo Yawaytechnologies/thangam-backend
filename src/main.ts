@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import cookieParser = require('cookie-parser');
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
@@ -48,7 +48,9 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  logger.log(`Sri Thangam Housing API running on port ${port} [${process.env.NODE_ENV || 'development'}]`);
+  logger.log(
+    `Sri Thangam Housing API running on port ${port} [${process.env.NODE_ENV || 'development'}]`,
+  );
 }
 
 bootstrap().catch((err) => {

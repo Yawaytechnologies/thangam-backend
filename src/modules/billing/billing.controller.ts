@@ -41,27 +41,31 @@ export class BillingController {
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  @ApiOperation({ summary: 'Get all billing records with pagination and filters' })
-  @ApiResponse({ status: 200, description: 'Paginated list of billing records' })
+  @ApiOperation({
+    summary: 'Get all billing records with pagination and filters',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of billing records',
+  })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
-  findAll(
-    @CurrentUser() user: any,
-    @Query() filters: BillingFilterDto,
-  ) {
+  findAll(@CurrentUser() user: any, @Query() filters: BillingFilterDto) {
     return this.billingService.findAll(user, filters);
   }
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  @ApiOperation({ summary: 'Create a new billing record (amountInWords auto-generated)' })
+  @ApiOperation({
+    summary: 'Create a new billing record (amountInWords auto-generated)',
+  })
   @ApiResponse({ status: 201, description: 'Billing record created' })
   @ApiResponse({ status: 400, description: 'Booking not found' })
-  @ApiResponse({ status: 403, description: 'Admin cannot bill a booking from another branch' })
-  create(
-    @Body() dto: CreateBillingDto,
-    @CurrentUser() user: any,
-  ) {
+  @ApiResponse({
+    status: 403,
+    description: 'Admin cannot bill a booking from another branch',
+  })
+  create(@Body() dto: CreateBillingDto, @CurrentUser() user: any) {
     return this.billingService.create(dto, user);
   }
 
@@ -115,7 +119,11 @@ export class BillingController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Download billing receipt PDF' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'PDF file stream', content: { 'application/pdf': {} } })
+  @ApiResponse({
+    status: 200,
+    description: 'PDF file stream',
+    content: { 'application/pdf': {} },
+  })
   @ApiResponse({ status: 404, description: 'Billing not found' })
   async getBillingPdf(
     @Param('id', ParseUUIDPipe) id: string,
@@ -134,7 +142,11 @@ export class BillingController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Download estimate copy PDF' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Estimate PDF file stream', content: { 'application/pdf': {} } })
+  @ApiResponse({
+    status: 200,
+    description: 'Estimate PDF file stream',
+    content: { 'application/pdf': {} },
+  })
   @ApiResponse({ status: 404, description: 'Billing not found' })
   async getEstimatePdf(
     @Param('id', ParseUUIDPipe) id: string,

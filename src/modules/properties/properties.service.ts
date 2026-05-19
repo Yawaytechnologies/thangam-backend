@@ -158,7 +158,9 @@ export class PropertiesService {
     }
 
     // Attach signed URLs to property images
-    const imageDocs = property.documents.filter((d) => d.documentType === 'PROPERTY_IMAGE');
+    const imageDocs = property.documents.filter(
+      (d) => d.documentType === 'PROPERTY_IMAGE',
+    );
     const images = await Promise.all(
       imageDocs.map(async (doc) => {
         try {
@@ -178,11 +180,24 @@ export class PropertiesService {
     };
   }
 
-  async uploadImage(propertyId: string, file: Express.Multer.File, uploadedBy: string) {
-    const property = await this.prisma.property.findUnique({ where: { id: propertyId } });
-    if (!property) throw new NotFoundException(`Property with id ${propertyId} not found`);
+  async uploadImage(
+    propertyId: string,
+    file: Express.Multer.File,
+    uploadedBy: string,
+  ) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property)
+      throw new NotFoundException(`Property with id ${propertyId} not found`);
 
-    const document = await this.documentsService.upload(file, 'property', propertyId, 'PROPERTY_IMAGE', uploadedBy);
+    const document = await this.documentsService.upload(
+      file,
+      'property',
+      propertyId,
+      'PROPERTY_IMAGE',
+      uploadedBy,
+    );
     const url = await this.documentsService.getSignedUrl(document.storagePath);
 
     return { document, url };
@@ -218,7 +233,7 @@ export class PropertiesService {
     });
   }
 
-  async update(id: string, dto: UpdatePropertyDto, userId: string) {
+  async update(id: string, dto: UpdatePropertyDto, _userId: string) {
     const property = await this.prisma.property.findUnique({ where: { id } });
     if (!property) {
       throw new NotFoundException(`Property with id ${id} not found`);
@@ -227,14 +242,22 @@ export class PropertiesService {
     return this.prisma.property.update({
       where: { id },
       data: {
-        ...(dto.propertyName !== undefined && { propertyName: dto.propertyName }),
-        ...(dto.propertyCode !== undefined && { propertyCode: dto.propertyCode }),
+        ...(dto.propertyName !== undefined && {
+          propertyName: dto.propertyName,
+        }),
+        ...(dto.propertyCode !== undefined && {
+          propertyCode: dto.propertyCode,
+        }),
         ...(dto.projectName !== undefined && { projectName: dto.projectName }),
         ...(dto.plotNumber !== undefined && { plotNumber: dto.plotNumber }),
-        ...(dto.propertyType !== undefined && { propertyType: dto.propertyType }),
+        ...(dto.propertyType !== undefined && {
+          propertyType: dto.propertyType,
+        }),
         ...(dto.squareFeet !== undefined && { squareFeet: dto.squareFeet }),
         ...(dto.facing !== undefined && { facing: dto.facing }),
-        ...(dto.approvalStatus !== undefined && { approvalStatus: dto.approvalStatus }),
+        ...(dto.approvalStatus !== undefined && {
+          approvalStatus: dto.approvalStatus,
+        }),
         ...(dto.address !== undefined && { address: dto.address }),
         ...(dto.city !== undefined && { city: dto.city }),
         ...(dto.district !== undefined && { district: dto.district }),

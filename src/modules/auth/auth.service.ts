@@ -37,12 +37,18 @@ export class AuthService {
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (user.status !== 'ACTIVE') throw new UnauthorizedException('Account is inactive');
+    if (user.status !== 'ACTIVE')
+      throw new UnauthorizedException('Account is inactive');
 
     const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
-    const tokens = await this.generateTokens(user.id, user.role, user.email, user.phone);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.role,
+      user.email,
+      user.phone,
+    );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -109,12 +115,12 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('jwt.secret') as string,
-      expiresIn: this.configService.get('jwt.expiresIn') as any,
+      expiresIn: this.configService.get('jwt.expiresIn'),
     });
 
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('jwt.refreshSecret') as string,
-      expiresIn: this.configService.get('jwt.refreshExpiresIn') as any,
+      expiresIn: this.configService.get('jwt.refreshExpiresIn'),
     });
 
     const expiresAt = new Date();

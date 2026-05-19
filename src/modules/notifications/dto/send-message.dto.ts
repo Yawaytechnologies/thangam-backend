@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MessageType } from '@prisma/client';
 
@@ -18,7 +24,9 @@ export class SendMessageDto {
   @IsNotEmpty()
   recipientRole: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID associated with this message' })
+  @ApiPropertyOptional({
+    description: 'Branch ID associated with this message',
+  })
   @IsString()
   @IsOptional()
   branchId?: string;
@@ -38,12 +46,16 @@ export class SendMessageDto {
   @IsNotEmpty()
   body: string;
 
-  @ApiPropertyOptional({ description: 'Related module name (e.g. Booking, Billing)' })
+  @ApiPropertyOptional({
+    description: 'Related module name (e.g. Booking, Billing)',
+  })
   @IsString()
   @IsOptional()
   relatedModule?: string;
 
-  @ApiPropertyOptional({ description: 'ID of the related entity in the module' })
+  @ApiPropertyOptional({
+    description: 'ID of the related entity in the module',
+  })
   @IsString()
   @IsOptional()
   relatedEntityId?: string;

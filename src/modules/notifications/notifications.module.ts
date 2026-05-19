@@ -12,7 +12,7 @@ import { NotificationsGateway } from './gateway/notifications.gateway';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('jwt.secret') as string,
-        signOptions: { expiresIn: configService.get('jwt.expiresIn') as any },
+        signOptions: { expiresIn: configService.get('jwt.expiresIn') },
       }),
       inject: [ConfigService],
     }),

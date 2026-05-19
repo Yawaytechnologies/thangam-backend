@@ -186,14 +186,22 @@ export class BranchesService {
       where: { id },
       data: {
         ...(branchData.name !== undefined && { name: branchData.name }),
-        ...(branchData.branchType !== undefined && { branchType: branchData.branchType }),
+        ...(branchData.branchType !== undefined && {
+          branchType: branchData.branchType,
+        }),
         ...(branchData.phone !== undefined && { phone: branchData.phone }),
         ...(branchData.email !== undefined && { email: branchData.email }),
-        ...(branchData.address !== undefined && { address: branchData.address }),
+        ...(branchData.address !== undefined && {
+          address: branchData.address,
+        }),
         ...(branchData.city !== undefined && { city: branchData.city }),
-        ...(branchData.district !== undefined && { district: branchData.district }),
+        ...(branchData.district !== undefined && {
+          district: branchData.district,
+        }),
         ...(branchData.state !== undefined && { state: branchData.state }),
-        ...(branchData.pincode !== undefined && { pincode: branchData.pincode }),
+        ...(branchData.pincode !== undefined && {
+          pincode: branchData.pincode,
+        }),
         ...(adminId && {
           admins: {
             connect: { id: adminId },

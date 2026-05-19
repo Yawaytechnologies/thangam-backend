@@ -1,10 +1,19 @@
-import { IsEnum, IsOptional, IsString, IsUUID, IsInt, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { Role, UserStatus } from '@prisma/client';
 
 export class MemberFilterDto {
-  @ApiPropertyOptional({ description: 'Search by fullName, memberId, phone, or codeNumber' })
+  @ApiPropertyOptional({
+    description: 'Search by fullName, memberId, phone, or codeNumber',
+  })
   @IsOptional()
   @IsString()
   search?: string;

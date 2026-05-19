@@ -80,13 +80,16 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException when user does not exist', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
-      await expect(service.login({ email: 'ghost@x.com', password: 'pass' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ email: 'ghost@x.com', password: 'pass' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException when account is inactive', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ ...activeUser, status: 'INACTIVE' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        ...activeUser,
+        status: 'INACTIVE',
+      });
       await expect(
         service.login({ email: activeUser.email, password: 'pass' }),
       ).rejects.toThrow(UnauthorizedException);
@@ -106,7 +109,10 @@ describe('AuthService', () => {
       mockPrisma.user.update.mockResolvedValue(activeUser);
       mockPrisma.session.create.mockResolvedValue({});
 
-      const result = await service.login({ email: activeUser.email, password: 'Admin@123' });
+      const result = await service.login({
+        email: activeUser.email,
+        password: 'Admin@123',
+      });
 
       expect(result).toHaveProperty('user');
       expect(result).toHaveProperty('accessToken', 'mock-token');
@@ -119,7 +125,10 @@ describe('AuthService', () => {
       mockPrisma.user.update.mockResolvedValue(activeUser);
       mockPrisma.session.create.mockResolvedValue({});
 
-      const result = await service.login({ email: activeUser.email, password: 'Admin@123' });
+      const result = await service.login({
+        email: activeUser.email,
+        password: 'Admin@123',
+      });
 
       expect(result.user).not.toHaveProperty('passwordHash');
     });
@@ -131,7 +140,10 @@ describe('AuthService', () => {
       mockPrisma.user.update.mockResolvedValue(phoneUser);
       mockPrisma.session.create.mockResolvedValue({});
 
-      const result = await service.login({ phone: '9876543210', password: 'pass' });
+      const result = await service.login({
+        phone: '9876543210',
+        password: 'pass',
+      });
 
       expect(result.user.phone).toBe('9876543210');
     });
@@ -157,7 +169,9 @@ describe('AuthService', () => {
   describe('refreshToken', () => {
     it('throws UnauthorizedException when session not found', async () => {
       mockPrisma.session.findUnique.mockResolvedValue(null);
-      await expect(service.refreshToken('bad-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken('bad-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException when session is expired', async () => {
@@ -165,9 +179,17 @@ describe('AuthService', () => {
         id: 's1',
         refreshToken: 'tok',
         expiresAt: new Date(Date.now() - 1000), // 1 second in the past
-        user: { id: 'u1', role: 'ADMIN', email: 'a@b.com', phone: null, status: 'ACTIVE' },
+        user: {
+          id: 'u1',
+          role: 'ADMIN',
+          email: 'a@b.com',
+          phone: null,
+          status: 'ACTIVE',
+        },
       });
-      await expect(service.refreshToken('tok')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken('tok')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException when user is inactive', async () => {
@@ -175,9 +197,17 @@ describe('AuthService', () => {
         id: 's1',
         refreshToken: 'tok',
         expiresAt: new Date(Date.now() + 60000),
-        user: { id: 'u1', role: 'ADMIN', email: 'a@b.com', phone: null, status: 'INACTIVE' },
+        user: {
+          id: 'u1',
+          role: 'ADMIN',
+          email: 'a@b.com',
+          phone: null,
+          status: 'INACTIVE',
+        },
       });
-      await expect(service.refreshToken('tok')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken('tok')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('returns new accessToken and refreshToken on valid token', async () => {
@@ -185,7 +215,13 @@ describe('AuthService', () => {
         id: 's1',
         refreshToken: 'valid-refresh',
         expiresAt: new Date(Date.now() + 60000),
-        user: { id: 'u1', role: 'ADMIN', email: 'a@b.com', phone: null, status: 'ACTIVE' },
+        user: {
+          id: 'u1',
+          role: 'ADMIN',
+          email: 'a@b.com',
+          phone: null,
+          status: 'ACTIVE',
+        },
       });
       mockPrisma.session.delete.mockResolvedValue({});
       mockPrisma.session.create.mockResolvedValue({});
@@ -201,14 +237,22 @@ describe('AuthService', () => {
         id: 's1',
         refreshToken: 'valid-refresh',
         expiresAt: new Date(Date.now() + 60000),
-        user: { id: 'u1', role: 'ADMIN', email: 'a@b.com', phone: null, status: 'ACTIVE' },
+        user: {
+          id: 'u1',
+          role: 'ADMIN',
+          email: 'a@b.com',
+          phone: null,
+          status: 'ACTIVE',
+        },
       });
       mockPrisma.session.delete.mockResolvedValue({});
       mockPrisma.session.create.mockResolvedValue({});
 
       await service.refreshToken('valid-refresh');
 
-      expect(mockPrisma.session.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
+      expect(mockPrisma.session.delete).toHaveBeenCalledWith({
+        where: { id: 's1' },
+      });
       expect(mockPrisma.session.create).toHaveBeenCalled();
     });
   });
@@ -235,7 +279,9 @@ describe('AuthService', () => {
   describe('getMe', () => {
     it('throws UnauthorizedException when user not found', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
-      await expect(service.getMe('missing-id')).rejects.toThrow(UnauthorizedException);
+      await expect(service.getMe('missing-id')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('returns user without passwordHash', async () => {

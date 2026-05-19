@@ -38,7 +38,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     } else if (status !== 401 && status !== 403) {
       // Log 4xx (except auth) at warn level to track validation issues
-      this.logger.warn(`${request.method} ${request.url} → ${status}: ${message}`);
+      this.logger.warn(
+        `${request.method} ${request.url} → ${status}: ${message}`,
+      );
     }
 
     response.status(status).json({
