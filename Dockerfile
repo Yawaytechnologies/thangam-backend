@@ -25,5 +25,7 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/package.json ./package.json
 
+RUN dos2unix scripts/start.sh 2>/dev/null || sed -i 's/\r//' scripts/start.sh
+
 EXPOSE 3001
 CMD ["sh", "scripts/start.sh"]
