@@ -44,6 +44,11 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/thangam_test
+
       - name: Type-check
         run: npx tsc --noEmit
 
@@ -63,13 +68,13 @@ jobs:
       - name: E2E tests
         run: npm run test:e2e -- --forceExit
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/thangam_test
+          JWT_SECRET: ci-test-secret-not-for-production
+          JWT_REFRESH_SECRET: ci-test-refresh-secret
           JWT_EXPIRES_IN: 15m
           JWT_REFRESH_EXPIRES_IN: 7d
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-key
           SUPABASE_STORAGE_BUCKET: sth-files
           NODE_ENV: test
 
