@@ -42,17 +42,20 @@ See `.env.example` for all required variables:
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | Supabase PostgreSQL connection string |
+| `DATABASE_URL` | Supabase PostgreSQL **pooler** connection string (use session-mode pooler URL, port 5432 on `*.pooler.supabase.com` — direct connections use IPv6 which some hosts can't reach) |
 | `JWT_SECRET` | Access token signing secret |
 | `JWT_REFRESH_SECRET` | Refresh token signing secret |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
 | `SUPABASE_STORAGE_BUCKET` | Storage bucket name (default: `sth-files`) |
 | `CORS_ORIGIN` | Allowed frontend origin |
+| `SWAGGER_ENABLED` | Set to `true` to enable Swagger UI in production (always on in development) |
 
 ## API Docs
 
-Swagger UI available in development at: `http://localhost:3001/api/docs`
+Swagger UI is available at `/api/docs`:
+- **Development:** always enabled at `http://localhost:3001/api/docs`
+- **Production:** set `SWAGGER_ENABLED=true` in environment variables
 
 ## Commands
 
@@ -98,8 +101,13 @@ prisma/
 
 ## Deployment
 
-Deployed on **Render** via `render.yaml`. CI/CD runs on GitHub Actions:
+Deployed on **Render**. CI/CD runs on GitHub Actions:
 1. Type-check → Lint → Unit tests → E2E tests → Build
 2. On `main` push: triggers Render deploy webhook
 
-Required GitHub Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RENDER_DEPLOY_HOOK_BACKEND`, `VITE_API_URL` (for frontend).
+**Render settings:**
+- Build command: `npm ci && npx prisma generate && npm run build`
+- Start command: `sh scripts/start.sh` (handles migration baseline + deploy, then starts app)
+- `DATABASE_URL` must use the Supabase **session-mode pooler URL** (not direct connection)
+
+Required GitHub Secrets: `RENDER_DEPLOY_HOOK_BACKEND`.
