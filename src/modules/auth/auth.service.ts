@@ -6,6 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
@@ -109,6 +110,7 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: userId,
       role,
+      jti: randomUUID(),
       ...(email && { email }),
       ...(phone && { phone }),
     };
