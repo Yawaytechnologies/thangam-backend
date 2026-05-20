@@ -74,15 +74,7 @@ export class PropertiesService {
       bookings: undefined,
     }));
 
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return { data, total, page, limit };
   }
 
   async create(dto: CreatePropertyDto, userId: string) {
