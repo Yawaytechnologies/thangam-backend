@@ -142,8 +142,8 @@ describe('Auth (e2e)', () => {
         .expect(200);
 
       expect(res.body.success).toBe(true);
-      // TransformInterceptor unwraps { data: [...], meta: {...} } → data field contains the array
-      expect(Array.isArray(res.body.data)).toBe(true);
+      // TransformInterceptor wraps response: res.body.data is the paginated object
+      expect(Array.isArray(res.body.data.data)).toBe(true);
     });
   });
 });
