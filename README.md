@@ -106,7 +106,7 @@ Deployed on **Render**. CI/CD runs on GitHub Actions:
 2. On `main` push: triggers Render deploy webhook
 
 **Render settings:**
-- Build command: `npm ci && npx prisma generate && npm run build`
+- Build command: `npm ci && npx prisma generate` (`dist/` is committed to git — no build step needed on Render)
 - Start command: `sh scripts/start.sh` (handles migration baseline + deploy, then starts app)
 - `DATABASE_URL` must use the Supabase **session-mode pooler URL** (not direct connection)
 
