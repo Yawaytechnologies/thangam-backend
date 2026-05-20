@@ -1,0 +1,34 @@
+import { Role } from '@prisma/client';
+export declare class CreateMemberDto {
+    fullName: string;
+    gender?: string;
+    dateOfBirth?: string;
+    bloodGroup?: string;
+    qualification?: string;
+    experience?: string;
+    phone: string;
+    alternatePhone?: string;
+    email?: string;
+    address?: string;
+    city?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+    panNumber?: string;
+    aadhaarNumber?: string;
+    voterIdNumber?: string;
+    drivingLicense?: string;
+    role: Role;
+    introName?: string;
+    reportsToId?: string;
+    codeNumber?: string;
+    nomineeName?: string;
+    nomineeRelation?: string;
+    nomineePhone?: string;
+    bankName?: string;
+    accountHolder?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankBranch?: string;
+    branchId?: string;
+}

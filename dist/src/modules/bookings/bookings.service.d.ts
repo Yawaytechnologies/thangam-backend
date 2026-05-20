@@ -1,0 +1,305 @@
+import { BookingStatus } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateBookingDto } from './dto/create-booking.dto';
+import { UpdateBookingDto } from './dto/update-booking.dto';
+import { BookingFilterDto } from './dto/booking-filter.dto';
+import { PdfService } from '../pdf/pdf.service';
+export declare class BookingsService {
+    private readonly prisma;
+    private readonly pdfService;
+    constructor(prisma: PrismaService, pdfService: PdfService);
+    findAll(user: any, filters: BookingFilterDto): Promise<{
+        data: {
+            totalPaid: number;
+            branch: {
+                id: string;
+                name: string;
+            };
+            property: {
+                id: string;
+                plotNumber: string;
+                propertyName: string;
+            };
+            payments: {
+                paymentMethod: import("@prisma/client").$Enums.PaymentMethod;
+                totalAmount: number;
+            }[];
+            id: string;
+            status: import("@prisma/client").$Enums.BookingStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            branchId: string;
+            dateOfBirth: Date | null;
+            propertyId: string;
+            bookingId: string;
+            applicantName: string;
+            relation: string | null;
+            applicantAddress: string | null;
+            pinCode: string | null;
+            cellNumber: string;
+            weddingDay: Date | null;
+            projectName: string;
+            plotNumber: string;
+            squareFeet: number | null;
+            bookingDate: Date;
+            edDdSmBmName: string | null;
+            referenceCode: string | null;
+            directorName: string | null;
+            signatureUrl: string | null;
+        }[];
+        total: number;
+        page: number;
+        limit: number;
+    }>;
+    create(dto: CreateBookingDto, user: any): Promise<({
+        branch: {
+            id: string;
+            name: string;
+        };
+        property: {
+            id: string;
+            plotNumber: string;
+            propertyName: string;
+            workflowStatus: import("@prisma/client").$Enums.WorkflowStatus;
+        };
+        payments: {
+            id: string;
+            createdAt: Date;
+            bankName: string | null;
+            bookingId: string;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethod;
+            favourOf: string | null;
+            chequeNumber: string | null;
+            chequeDate: Date | null;
+            gpayReference: string | null;
+            cashAmount: number | null;
+            totalAmount: number;
+        }[];
+        denominations: {
+            id: string;
+            bookingId: string;
+            denomination: number;
+            count: number;
+            amount: number;
+        }[];
+    } & {
+        id: string;
+        status: import("@prisma/client").$Enums.BookingStatus;
+        createdAt: Date;
+        updatedAt: Date;
+        branchId: string;
+        dateOfBirth: Date | null;
+        propertyId: string;
+        bookingId: string;
+        applicantName: string;
+        relation: string | null;
+        applicantAddress: string | null;
+        pinCode: string | null;
+        cellNumber: string;
+        weddingDay: Date | null;
+        projectName: string;
+        plotNumber: string;
+        squareFeet: number | null;
+        bookingDate: Date;
+        edDdSmBmName: string | null;
+        referenceCode: string | null;
+        directorName: string | null;
+        signatureUrl: string | null;
+    }) | null>;
+    findOne(id: string): Promise<{
+        branch: {
+            id: string;
+            name: string;
+            branchCode: string;
+        };
+        property: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            address: string | null;
+            city: string | null;
+            district: string | null;
+            state: string | null;
+            pincode: string | null;
+            propertyId: string;
+            projectName: string;
+            plotNumber: string;
+            squareFeet: number | null;
+            propertyName: string;
+            propertyCode: string | null;
+            propertyType: import("@prisma/client").$Enums.PropertyType;
+            facing: string | null;
+            approvalStatus: string | null;
+            mapLocation: string | null;
+            workflowStatus: import("@prisma/client").$Enums.WorkflowStatus;
+        };
+        billing: {
+            id: string;
+            status: import("@prisma/client").$Enums.BillingStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            bookingId: string;
+            billingId: string;
+            signatureUrl: string | null;
+            buyerName: string;
+            buyerAddress: string | null;
+            buyerPhone: string;
+            orderNumber: string | null;
+            billingNumber: string | null;
+            billingDate: Date;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethod;
+            amountInNumbers: number;
+            amountInWords: string;
+            totalReceived: number;
+            totalBalance: number;
+            operationalNotes: string | null;
+            settlementNotes: string | null;
+            termsConditions: string | null;
+        }[];
+        workflowHistory: {
+            id: string;
+            createdAt: Date;
+            entityType: string;
+            entityId: string;
+            remarks: string | null;
+            fromStatus: string | null;
+            toStatus: string;
+            performedBy: string | null;
+        }[];
+        documents: {
+            id: string;
+            createdAt: Date;
+            entityType: string;
+            entityId: string;
+            documentType: import("@prisma/client").$Enums.DocumentType;
+            fileName: string;
+            storagePath: string;
+            mimeType: string;
+            fileSize: number | null;
+            isVerified: boolean;
+            uploadedBy: string | null;
+        }[];
+        payments: {
+            id: string;
+            createdAt: Date;
+            bankName: string | null;
+            bookingId: string;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethod;
+            favourOf: string | null;
+            chequeNumber: string | null;
+            chequeDate: Date | null;
+            gpayReference: string | null;
+            cashAmount: number | null;
+            totalAmount: number;
+        }[];
+        denominations: {
+            id: string;
+            bookingId: string;
+            denomination: number;
+            count: number;
+            amount: number;
+        }[];
+    } & {
+        id: string;
+        status: import("@prisma/client").$Enums.BookingStatus;
+        createdAt: Date;
+        updatedAt: Date;
+        branchId: string;
+        dateOfBirth: Date | null;
+        propertyId: string;
+        bookingId: string;
+        applicantName: string;
+        relation: string | null;
+        applicantAddress: string | null;
+        pinCode: string | null;
+        cellNumber: string;
+        weddingDay: Date | null;
+        projectName: string;
+        plotNumber: string;
+        squareFeet: number | null;
+        bookingDate: Date;
+        edDdSmBmName: string | null;
+        referenceCode: string | null;
+        directorName: string | null;
+        signatureUrl: string | null;
+    }>;
+    update(id: string, dto: UpdateBookingDto, user: any): Promise<({
+        branch: {
+            id: string;
+            name: string;
+        };
+        property: {
+            id: string;
+            plotNumber: string;
+            propertyName: string;
+        };
+        payments: {
+            id: string;
+            createdAt: Date;
+            bankName: string | null;
+            bookingId: string;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethod;
+            favourOf: string | null;
+            chequeNumber: string | null;
+            chequeDate: Date | null;
+            gpayReference: string | null;
+            cashAmount: number | null;
+            totalAmount: number;
+        }[];
+        denominations: {
+            id: string;
+            bookingId: string;
+            denomination: number;
+            count: number;
+            amount: number;
+        }[];
+    } & {
+        id: string;
+        status: import("@prisma/client").$Enums.BookingStatus;
+        createdAt: Date;
+        updatedAt: Date;
+        branchId: string;
+        dateOfBirth: Date | null;
+        propertyId: string;
+        bookingId: string;
+        applicantName: string;
+        relation: string | null;
+        applicantAddress: string | null;
+        pinCode: string | null;
+        cellNumber: string;
+        weddingDay: Date | null;
+        projectName: string;
+        plotNumber: string;
+        squareFeet: number | null;
+        bookingDate: Date;
+        edDdSmBmName: string | null;
+        referenceCode: string | null;
+        directorName: string | null;
+        signatureUrl: string | null;
+    }) | null>;
+    updateStatus(id: string, status: BookingStatus, userId: string): Promise<{
+        id: string;
+        status: import("@prisma/client").$Enums.BookingStatus;
+        createdAt: Date;
+        updatedAt: Date;
+        branchId: string;
+        dateOfBirth: Date | null;
+        propertyId: string;
+        bookingId: string;
+        applicantName: string;
+        relation: string | null;
+        applicantAddress: string | null;
+        pinCode: string | null;
+        cellNumber: string;
+        weddingDay: Date | null;
+        projectName: string;
+        plotNumber: string;
+        squareFeet: number | null;
+        bookingDate: Date;
+        edDdSmBmName: string | null;
+        referenceCode: string | null;
+        directorName: string | null;
+        signatureUrl: string | null;
+    }>;
+    generatePdf(id: string): Promise<Buffer>;
+}
