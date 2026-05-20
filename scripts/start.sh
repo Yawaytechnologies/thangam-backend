@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-# Build the application (dist/ is gitignored so it must be built at runtime).
-npm run build
-
 # Baseline the init migration if it hasn't been recorded yet.
 # This handles databases that were originally set up with `prisma db push`
 # rather than migrations. Safe to run on every deploy — a no-op once resolved.
