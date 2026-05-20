@@ -1,1 +1,0 @@
-{"version":3,"file":"puppeteer-core.js","sourceRoot":"","sources":["../../../src/__mocks__/puppeteer-core.ts"],"names":[],"mappings":";;;AAAO,MAAM,MAAM,GAAG,GAAG,EAAE,CAAC,OAAO,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC;AAArC,QAAA,MAAM,UAA+B;AAC3C,MAAM,cAAc,GAAG,GAAG,EAAE,CAAC,EAAE,CAAC;AAA1B,QAAA,cAAc,kBAAY;AACvC,kBAAe,EAAE,MAAM,EAAN,cAAM,EAAE,cAAc,EAAd,sBAAc,EAAE,CAAC"}
