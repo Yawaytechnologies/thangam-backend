@@ -24,6 +24,7 @@ const mockPrisma = {
 
 const mockJwt = {
   sign: jest.fn().mockReturnValue('mock-token'),
+  verifyAsync: jest.fn().mockResolvedValue({}),
 };
 
 const mockConfig = {

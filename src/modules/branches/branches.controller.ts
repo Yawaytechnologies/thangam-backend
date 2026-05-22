@@ -16,7 +16,13 @@ import {
   ApiOperation,
   ApiParam,
 } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
 import { Role, BranchStatus } from '@prisma/client';
+
+class UpdateBranchStatusDto {
+  @IsEnum(BranchStatus)
+  status: BranchStatus;
+}
 import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
@@ -69,8 +75,8 @@ export class BranchesController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('status') status: BranchStatus,
+    @Body() body: UpdateBranchStatusDto,
   ) {
-    return this.branchesService.updateStatus(id, status);
+    return this.branchesService.updateStatus(id, body.status);
   }
 }

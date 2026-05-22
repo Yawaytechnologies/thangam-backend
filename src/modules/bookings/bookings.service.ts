@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
   ServiceUnavailableException,
   Optional,
 } from '@nestjs/common';
@@ -68,6 +69,16 @@ export class BookingsService {
       ];
     }
 
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -128,13 +139,18 @@ export class BookingsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Verify property exists
+      // 1. Verify property exists and is available
       const property = await tx.property.findUnique({
         where: { id: dto.propertyId },
       });
       if (!property) {
         throw new NotFoundException(
           `Property with id ${dto.propertyId} not found`,
+        );
+      }
+      if (property.workflowStatus !== WorkflowStatus.AVAILABLE) {
+        throw new ConflictException(
+          `Property is not available for booking (current status: ${property.workflowStatus})`,
         );
       }
 
@@ -205,9 +221,9 @@ export class BookingsService {
       // 7. Create WorkflowHistory for property
       await tx.workflowHistory.create({
         data: {
-          entityType: 'PROPERTY',
+          entityType: 'property',
           entityId: dto.propertyId,
-          fromStatus: WorkflowStatus.AVAILABLE,
+          fromStatus: property.workflowStatus,
           toStatus: WorkflowStatus.BOOKING_INITIATED,
           remarks: `Booking initiated by ${booking.applicantName}`,
           performedBy: user.id,
@@ -217,7 +233,7 @@ export class BookingsService {
       // 8. Create WorkflowHistory for booking
       await tx.workflowHistory.create({
         data: {
-          entityType: 'BOOKING',
+          entityType: 'booking',
           entityId: booking.id,
           fromStatus: null,
           toStatus: BookingStatus.BOOKING_INITIATED,
@@ -417,7 +433,7 @@ export class BookingsService {
       // WorkflowHistory for booking
       await tx.workflowHistory.create({
         data: {
-          entityType: 'BOOKING',
+          entityType: 'booking',
           entityId: id,
           fromStatus: previousStatus,
           toStatus: status,
@@ -429,7 +445,7 @@ export class BookingsService {
       // WorkflowHistory for property
       await tx.workflowHistory.create({
         data: {
-          entityType: 'PROPERTY',
+          entityType: 'property',
           entityId: booking.propertyId,
           fromStatus: null,
           toStatus: newWorkflowStatus,
@@ -440,6 +456,28 @@ export class BookingsService {
 
       return updated;
     });
+  }
+
+  async remove(id: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id },
+      include: { billing: { select: { id: true } } },
+    });
+    if (!booking) {
+      throw new NotFoundException(`Booking with id ${id} not found`);
+    }
+    if (booking.billing.length > 0) {
+      throw new ConflictException(
+        'Cannot delete a booking that has billing records',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.document.deleteMany({ where: { entityId: id } }),
+      this.prisma.workflowHistory.deleteMany({ where: { entityId: id } }),
+      this.prisma.notification.deleteMany({ where: { bookingId: id } }),
+      this.prisma.booking.delete({ where: { id } }),
+    ]);
   }
 
   async generatePdf(id: string): Promise<Buffer> {

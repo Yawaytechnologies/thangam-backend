@@ -73,6 +73,17 @@ export class BillingService {
       });
     }
 
+    if (filters.startDate || filters.endDate) {
+      const createdAtFilter: any = {};
+      if (filters.startDate) createdAtFilter.gte = new Date(filters.startDate);
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.lte = end;
+      }
+      andClauses.push({ createdAt: createdAtFilter });
+    }
+
     const where: any = andClauses.length > 0 ? { AND: andClauses } : {};
 
     const [data, total] = await Promise.all([
@@ -160,7 +171,7 @@ export class BillingService {
       // 5. Create WorkflowHistory for billing
       await tx.workflowHistory.create({
         data: {
-          entityType: 'BILLING',
+          entityType: 'billing',
           entityId: billing.id,
           fromStatus: null,
           toStatus: BillingStatus.PENDING,
@@ -307,7 +318,7 @@ export class BillingService {
 
       await tx.workflowHistory.create({
         data: {
-          entityType: 'BILLING',
+          entityType: 'billing',
           entityId: id,
           fromStatus: previousStatus,
           toStatus: status,
@@ -318,6 +329,20 @@ export class BillingService {
 
       return updated;
     });
+  }
+
+  async remove(id: string) {
+    const billing = await this.prisma.billing.findUnique({ where: { id } });
+    if (!billing) {
+      throw new NotFoundException(`Billing with id ${id} not found`);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.document.deleteMany({ where: { entityId: id } }),
+      this.prisma.workflowHistory.deleteMany({ where: { entityId: id } }),
+      this.prisma.notification.deleteMany({ where: { billingId: id } }),
+      this.prisma.billing.delete({ where: { id } }),
+    ]);
   }
 
   async generatePdf(id: string, type: 'billing' | 'estimate'): Promise<Buffer> {

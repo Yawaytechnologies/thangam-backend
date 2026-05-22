@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsEnum, IsInt, Min } from 'class-validator';
+import {
+  IsUUID,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsInt,
+  Min,
+  IsDateString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingStatus, PaymentMethod } from '@prisma/client';
@@ -25,7 +33,7 @@ export class BillingFilterDto {
   @ApiPropertyOptional({
     description: 'Filter by branch UUID (SUPER_ADMIN only)',
   })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   branchId?: string;
 
@@ -42,4 +50,18 @@ export class BillingFilterDto {
   @Min(1)
   @IsOptional()
   limit?: number = 20;
+
+  @ApiPropertyOptional({
+    description: 'Filter by start date (ISO 8601 format)',
+  })
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by end date (ISO 8601 format)',
+  })
+  @IsDateString()
+  @IsOptional()
+  endDate?: string;
 }

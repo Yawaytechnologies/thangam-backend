@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsDateString,
   IsUUID,
+  IsEmail,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -52,7 +53,7 @@ export class CreateMemberDto {
 
   @ApiPropertyOptional({ example: 'ravi@example.com' })
   @IsOptional()
-  @IsString()
+  @IsEmail()
   email?: string;
 
   @ApiPropertyOptional({ example: '12, Gandhi Street' })

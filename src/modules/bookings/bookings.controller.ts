@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -21,7 +22,13 @@ import {
   ApiBody,
   ApiResponse,
 } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
 import { Role, BookingStatus } from '@prisma/client';
+
+class UpdateBookingStatusDto {
+  @IsEnum(BookingStatus)
+  status: BookingStatus;
+}
 import type { Response } from 'express';
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -110,10 +117,23 @@ export class BookingsController {
   })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('status') status: BookingStatus,
+    @Body() body: UpdateBookingStatusDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.bookingsService.updateStatus(id, status, userId);
+    return this.bookingsService.updateStatus(id, body.status, userId);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete a booking (SUPER_ADMIN only, no existing billing)',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Booking deleted' })
+  @ApiResponse({ status: 409, description: 'Booking has billing records' })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.bookingsService.remove(id);
   }
 
   @Get(':id/pdf')
