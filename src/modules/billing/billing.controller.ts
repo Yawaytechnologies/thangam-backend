@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -21,7 +22,13 @@ import {
   ApiBody,
   ApiResponse,
 } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
 import { Role, BillingStatus } from '@prisma/client';
+
+class UpdateBillingStatusDto {
+  @IsEnum(BillingStatus)
+  status: BillingStatus;
+}
 import type { Response } from 'express';
 import { BillingService } from './billing.service';
 import { CreateBillingDto } from './dto/create-billing.dto';
@@ -109,10 +116,21 @@ export class BillingController {
   })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('status') status: BillingStatus,
+    @Body() body: UpdateBillingStatusDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.billingService.updateStatus(id, status, userId);
+    return this.billingService.updateStatus(id, body.status, userId);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a billing record (SUPER_ADMIN only)' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Billing record deleted' })
+  @ApiResponse({ status: 404, description: 'Billing not found' })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.billingService.remove(id);
   }
 
   @Get(':id/pdf')

@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -11,6 +12,8 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -22,7 +25,13 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { ImageFilePipe } from '../../common/pipes/image-file.pipe';
+import { IsEnum } from 'class-validator';
 import { Role, UserStatus } from '@prisma/client';
+
+class UpdateAdminStatusDto {
+  @IsEnum(UserStatus)
+  status: UserStatus;
+}
 import { AdminsService } from './admins.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
@@ -77,9 +86,20 @@ export class AdminsController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('status') status: UserStatus,
+    @Body() body: UpdateAdminStatusDto,
   ) {
-    return this.adminsService.updateStatus(id, status);
+    return this.adminsService.updateStatus(id, body.status);
+  }
+
+  @Delete('admins/:id')
+  @Roles(Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete an admin and their user account (SUPER_ADMIN only)',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminsService.remove(id);
   }
 
   @Get('admin/profile')

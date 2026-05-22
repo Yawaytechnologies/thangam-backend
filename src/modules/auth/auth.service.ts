@@ -61,6 +61,14 @@ export class AuthService {
   }
 
   async refreshToken(token: string) {
+    try {
+      await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get<string>('jwt.refreshSecret'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
     const session = await this.prisma.session.findUnique({
       where: { refreshToken: token },
       include: { user: true },

@@ -258,6 +258,26 @@ export class AdminsService {
       throw new NotFoundException(`Admin with id ${id} not found`);
     }
 
+    // Check email uniqueness if being changed
+    if (dto.email && dto.email !== admin.user.email) {
+      const emailConflict = await this.prisma.user.findFirst({
+        where: { email: dto.email, NOT: { id: admin.userId } },
+      });
+      if (emailConflict) {
+        throw new ConflictException(`Email ${dto.email} is already in use`);
+      }
+    }
+
+    // Check phone uniqueness if being changed
+    if (dto.phone && dto.phone !== admin.user.phone) {
+      const phoneConflict = await this.prisma.user.findFirst({
+        where: { phone: dto.phone, NOT: { id: admin.userId } },
+      });
+      if (phoneConflict) {
+        throw new ConflictException(`Phone ${dto.phone} is already in use`);
+      }
+    }
+
     // Verify branch if branchId is being changed
     if (dto.branchId) {
       const branch = await this.prisma.branch.findUnique({
@@ -365,6 +385,21 @@ export class AdminsService {
         },
       },
     });
+  }
+
+  async remove(id: string) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+    if (!admin) {
+      throw new NotFoundException(`Admin with id ${id} not found`);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.document.deleteMany({ where: { entityId: admin.id } }),
+      this.prisma.user.delete({ where: { id: admin.userId } }),
+    ]);
   }
 
   async getOwnProfile(userId: string) {

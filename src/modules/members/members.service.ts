@@ -266,10 +266,7 @@ export class MembersService {
       return newMember;
     });
 
-    return {
-      ...member,
-      defaultPassword,
-    };
+    return member;
   }
 
   // ─── findOne ──────────────────────────────────────────────────────────────

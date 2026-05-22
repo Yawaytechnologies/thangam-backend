@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
@@ -59,7 +60,7 @@ export class PropertiesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single property by ID with full details' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.propertiesService.findOne(id);
   }
 
@@ -67,7 +68,7 @@ export class PropertiesController {
   @Get(':id/workflow')
   @ApiOperation({ summary: 'Get workflow history for a property' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  getWorkflow(@Param('id') id: string) {
+  getWorkflow(@Param('id', ParseUUIDPipe) id: string) {
     return this.propertiesService.getWorkflow(id);
   }
 
@@ -75,7 +76,7 @@ export class PropertiesController {
   @Get(':id/documents')
   @ApiOperation({ summary: 'Get documents for a property' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  getDocuments(@Param('id') id: string) {
+  getDocuments(@Param('id', ParseUUIDPipe) id: string) {
     return this.propertiesService.getDocuments(id);
   }
 
@@ -85,7 +86,7 @@ export class PropertiesController {
   @ApiOperation({ summary: 'Update property details (SUPER_ADMIN only)' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePropertyDto,
     @CurrentUser('id') userId: string,
   ) {
@@ -100,7 +101,7 @@ export class PropertiesController {
   })
   @ApiParam({ name: 'id', description: 'Property UUID' })
   updateWorkflow(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWorkflowDto,
     @CurrentUser('id') userId: string,
   ) {
@@ -124,7 +125,7 @@ export class PropertiesController {
     },
   })
   uploadImage(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile(ImageFilePipe) file: Express.Multer.File,
     @CurrentUser('id') uploadedBy: string,
   ) {

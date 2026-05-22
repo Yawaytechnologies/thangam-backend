@@ -238,7 +238,7 @@ export class DashboardService {
       memberRole === Role.DIRECTOR
         ? this.prisma.notificationRecipient.count({
             where: {
-              user: { member: { userId } },
+              userId,
               status: 'UNREAD',
             },
           })
