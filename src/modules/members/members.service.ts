@@ -197,8 +197,7 @@ export class MembersService {
     const count = await this.prisma.member.count();
     const memberId = generateMemberId(count + 1);
 
-    const defaultPassword = dto.phone;
-    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const member = await this.prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({

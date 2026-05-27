@@ -61,7 +61,7 @@ export class MembersController {
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Create a new member' })
-  @ApiCreatedResponse({ description: 'Member created with default password' })
+  @ApiCreatedResponse({ description: 'Member created with password' })
   create(@Body() dto: CreateMemberDto, @CurrentUser() user: any) {
     return this.membersService.create(dto, user);
   }
