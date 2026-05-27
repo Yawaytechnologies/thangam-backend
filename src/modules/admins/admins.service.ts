@@ -4,8 +4,9 @@ import {
   ConflictException,
   Optional,
 } from '@nestjs/common';
-import { Role, UserStatus } from '@prisma/client';
+import { Prisma, Role, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import 'multer';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -21,6 +22,33 @@ export class AdminsService {
     private readonly documentsService: DocumentsService,
     @Optional() private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async generateNextAdminId(
+    tx: Prisma.TransactionClient,
+  ): Promise<string> {
+    const admins = await tx.admin.findMany({
+      select: { adminId: true },
+    });
+
+    const maxSequence = admins.reduce((max, admin) => {
+      const match = /^STH-ADM-(\d+)$/.exec(admin.adminId);
+      if (!match) return max;
+
+      const sequence = Number(match[1]);
+      return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+    }, 0);
+
+    return generateAdminId(maxSequence + 1);
+  }
+
+  private isAdminIdConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta.target.includes('admin_id')
+    );
+  }
 
   async findAll(filters: AdminFilterDto) {
     const page = filters.page ?? 1;
@@ -112,10 +140,43 @@ export class AdminsService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const existingCount = await this.prisma.admin.count();
-    const adminId = generateAdminId(existingCount + 1);
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    let result: Awaited<ReturnType<typeof this.createAdminRecord>> | undefined;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        result = await this.createAdminRecord(dto, passwordHash);
+        break;
+      } catch (error) {
+        if (!this.isAdminIdConflict(error) || attempt === 3) {
+          throw error;
+        }
+      }
+    }
+    if (!result) {
+      throw new Error('Failed to create admin');
+    }
+
+    if (this.notificationsService) {
+      try {
+        await this.notificationsService.createNotification({
+          title: 'Admin Created',
+          message: `New admin "${result.fullName}" (${result.adminId}) has been created for branch "${result.branch.name}".`,
+          type: 'ADMIN_ACTIVITY',
+          triggeredById: createdById,
+          branchId: dto.branchId,
+        });
+      } catch {
+        // Notification failure should not block admin creation
+      }
+    }
+
+    return result;
+  }
+
+  private async createAdminRecord(dto: CreateAdminDto, passwordHash: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const adminId = await this.generateNextAdminId(tx);
+
       const user = await tx.user.create({
         data: {
           phone: dto.phone,
@@ -126,7 +187,7 @@ export class AdminsService {
         },
       });
 
-      const admin = await tx.admin.create({
+      return tx.admin.create({
         data: {
           adminId,
           userId: user.id,
@@ -162,25 +223,7 @@ export class AdminsService {
           },
         },
       });
-
-      return admin;
     });
-
-    if (this.notificationsService) {
-      try {
-        await this.notificationsService.createNotification({
-          title: 'Admin Created',
-          message: `New admin "${result.fullName}" (${result.adminId}) has been created for branch "${result.branch.name}".`,
-          type: 'ADMIN_ACTIVITY',
-          triggeredById: createdById,
-          branchId: dto.branchId,
-        });
-      } catch {
-        // Notification failure should not block admin creation
-      }
-    }
-
-    return result;
   }
 
   async findOne(id: string) {
