@@ -60,6 +60,24 @@ export class DocumentsService {
     return document;
   }
 
+  async uploadToStorage(
+    file: Express.Multer.File,
+    entityType: string,
+    entityId: string,
+  ): Promise<string> {
+    const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
+
+    const { error } = await this.supabase.storage
+      .from(this.bucket)
+      .upload(storagePath, file.buffer, { contentType: file.mimetype });
+
+    if (error) {
+      throw new BadRequestException(`File upload failed: ${error.message}`);
+    }
+
+    return storagePath;
+  }
+
   async getSignedUrl(storagePath: string): Promise<string> {
     const { data, error } = await this.supabase.storage
       .from(this.bucket)

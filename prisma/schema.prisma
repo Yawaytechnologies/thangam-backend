@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  relationMode = "prisma"
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ model Branch {
   district   String?
   state      String?
   pincode    String?
+  images     Json?
   status     BranchStatus @default(ACTIVE)
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
@@ -252,7 +254,7 @@ model Member {
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   branch        Branch         @relation(fields: [branchId], references: [id])
-  reportsTo     Member?        @relation("Hierarchy", fields: [reportsToId], references: [id])
+  reportsTo     Member?        @relation("Hierarchy", fields: [reportsToId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   downline      Member[]       @relation("Hierarchy")
   documents     Document[]
   topPerformers TopPerformer[]
@@ -426,11 +428,11 @@ model Document {
   uploadedBy   String?      @map("uploaded_by")
   createdAt    DateTime     @default(now()) @map("created_at")
 
-  member   Member?   @relation(fields: [entityId], references: [id], map: "doc_member_fk")
-  admin    Admin?    @relation(fields: [entityId], references: [id], map: "doc_admin_fk")
-  property Property? @relation(fields: [entityId], references: [id], map: "doc_property_fk")
-  booking  Booking?  @relation(fields: [entityId], references: [id], map: "doc_booking_fk")
-  billing  Billing?  @relation(fields: [entityId], references: [id], map: "doc_billing_fk")
+  member   Member?   @relation(fields: [entityId], references: [id], map: "doc_member_fk", onUpdate: Restrict)
+  admin    Admin?    @relation(fields: [entityId], references: [id], map: "doc_admin_fk", onUpdate: Restrict)
+  property Property? @relation(fields: [entityId], references: [id], map: "doc_property_fk", onUpdate: Restrict)
+  booking  Booking?  @relation(fields: [entityId], references: [id], map: "doc_booking_fk", onUpdate: Restrict)
+  billing  Billing?  @relation(fields: [entityId], references: [id], map: "doc_billing_fk", onUpdate: Restrict)
 
   @@map("documents")
 }
@@ -510,7 +512,7 @@ model TopPerformer {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  member Member @relation(fields: [memberId], references: [id])
+  member Member @relation(fields: [memberId], references: [id], onUpdate: Restrict)
 
   @@map("top_performers")
 }
