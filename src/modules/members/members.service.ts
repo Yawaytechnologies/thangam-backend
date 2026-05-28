@@ -119,6 +119,7 @@ export class MembersService {
             },
           },
           branch: true,
+          reportsTo: { select: { id: true, fullName: true, role: true } },
         },
       }),
       this.prisma.member.count({ where }),

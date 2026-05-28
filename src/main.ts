@@ -41,7 +41,10 @@ async function bootstrap() {
   });
 
   // Swagger — enabled locally always, in production when SWAGGER_ENABLED=true
-  if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.SWAGGER_ENABLED === 'true'
+  ) {
     const config = new DocumentBuilder()
       .setTitle('Sri Thangam Housing API')
       .setDescription('Real estate operations management API')
