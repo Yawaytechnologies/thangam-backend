@@ -182,7 +182,9 @@ describe('BookingsService', () => {
       mockTransaction.mockImplementation(async (fn: any) =>
         fn({
           property: {
-            findUnique: jest.fn().mockResolvedValue({ id: 'prop-1', workflowStatus: 'AVAILABLE' }),
+            findUnique: jest
+              .fn()
+              .mockResolvedValue({ id: 'prop-1', workflowStatus: 'AVAILABLE' }),
             update: jest.fn(),
           },
           booking: {

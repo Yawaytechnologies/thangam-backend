@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsUUID,
   IsEmail,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -14,7 +15,7 @@ export class CreateMemberDto {
   @ApiProperty({ example: 'Ravi Kumar' })
   @IsString()
   @IsNotEmpty()
-  fullName: string;
+  fullName!: string;
 
   @ApiPropertyOptional({ example: 'Male' })
   @IsOptional()
@@ -44,7 +45,7 @@ export class CreateMemberDto {
   @ApiProperty({ example: '9876543210' })
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phone!: string;
 
   @ApiPropertyOptional({ example: '9876543211' })
   @IsOptional()
@@ -104,7 +105,13 @@ export class CreateMemberDto {
   @ApiProperty({ enum: Role, example: Role.AGENT })
   @IsEnum(Role)
   @IsNotEmpty()
-  role: Role;
+  role!: Role;
+
+  @ApiProperty({ example: 'Member@123', minLength: 6 })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
+  password!: string;
 
   @ApiPropertyOptional({ example: 'Suresh Babu' })
   @IsOptional()
