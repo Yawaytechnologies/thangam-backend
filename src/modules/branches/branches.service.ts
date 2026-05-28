@@ -7,15 +7,25 @@ import {
 import { BranchStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DocumentsService } from '../documents/documents.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchFilterDto } from './dto/branch-filter.dto';
 import { generateBranchCode } from '../../common/utils/id-generator.util';
 
+const getBranchImages = (images: unknown): string[] => {
+  if (!Array.isArray(images)) return [];
+  return images.filter((image): image is string => typeof image === 'string');
+};
+
+const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 @Injectable()
 export class BranchesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly documentsService: DocumentsService,
     @Optional() private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -57,10 +67,18 @@ export class BranchesService {
       this.prisma.branch.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    const branches = await Promise.all(
+      data.map((branch) => this.withSignedBranchImages(branch)),
+    );
+
+    return { data: branches, total, page, limit };
   }
 
-  async create(dto: CreateBranchDto, userId: string) {
+  async create(
+    dto: CreateBranchDto,
+    userId: string,
+    files: Express.Multer.File[] = [],
+  ) {
     const existingCount = await this.prisma.branch.count();
     const branchCode = generateBranchCode(existingCount + 1);
 
@@ -76,7 +94,7 @@ export class BranchesService {
 
     const { adminId, ...branchData } = dto;
 
-    const branch = await this.prisma.branch.create({
+    let branch = await this.prisma.branch.create({
       data: {
         branchCode,
         name: branchData.name,
@@ -105,6 +123,25 @@ export class BranchesService {
       },
     });
 
+    if (files.length > 0) {
+      const storagePaths = await this.uploadBranchImages(branch.id, files);
+      const existingImages = (branch as { images?: unknown }).images;
+      const images = [...getBranchImages(existingImages), ...storagePaths];
+      branch = await this.prisma.branch.update({
+        where: { id: branch.id },
+        data: { images },
+        include: {
+          admins: true,
+          _count: {
+            select: {
+              admins: true,
+              members: true,
+            },
+          },
+        },
+      });
+    }
+
     if (this.notificationsService) {
       try {
         await this.notificationsService.createNotification({
@@ -119,7 +156,48 @@ export class BranchesService {
       }
     }
 
-    return branch;
+    return this.withSignedBranchImages(branch);
+  }
+
+  private async uploadBranchImages(
+    branchId: string,
+    files: Express.Multer.File[],
+  ) {
+    files.forEach((file) => this.validateImageFile(file));
+
+    return Promise.all(
+      files.map((file) =>
+        this.documentsService.uploadToStorage(file, 'branch', branchId),
+      ),
+    );
+  }
+
+  private validateImageFile(file: Express.Multer.File) {
+    if (!ALLOWED_IMAGE_MIME.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Only JPEG, PNG, and WebP images are allowed',
+      );
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      throw new BadRequestException('Image must be 5 MB or smaller');
+    }
+  }
+
+  private async withSignedBranchImages<T>(
+    branch: T,
+  ): Promise<T & { images: string[] }> {
+    const imagePaths = getBranchImages((branch as { images?: unknown }).images);
+    const images = await Promise.all(
+      imagePaths.map(async (storagePath) => {
+        try {
+          return await this.documentsService.getSignedUrl(storagePath);
+        } catch {
+          return storagePath;
+        }
+      }),
+    );
+
+    return { ...(branch as object), images } as T & { images: string[] };
   }
 
   async findOne(id: string) {
@@ -163,7 +241,7 @@ export class BranchesService {
       },
     });
 
-    return {
+    return this.withSignedBranchImages({
       ...branch,
       operationalSummary: {
         adminCount: branch._count.admins,
@@ -171,10 +249,14 @@ export class BranchesService {
         bookingCount: branch._count.bookings,
         billingCount,
       },
-    };
+    });
   }
 
-  async update(id: string, dto: UpdateBranchDto) {
+  async update(
+    id: string,
+    dto: UpdateBranchDto,
+    files: Express.Multer.File[] = [],
+  ) {
     const branch = await this.prisma.branch.findUnique({ where: { id } });
     if (!branch) {
       throw new NotFoundException(`Branch with id ${id} not found`);
@@ -182,7 +264,7 @@ export class BranchesService {
 
     const { adminId, ...branchData } = dto;
 
-    const updated = await this.prisma.branch.update({
+    let updated = await this.prisma.branch.update({
       where: { id },
       data: {
         ...(branchData.name !== undefined && { name: branchData.name }),
@@ -218,7 +300,25 @@ export class BranchesService {
       },
     });
 
-    return updated;
+    if (files.length > 0) {
+      const storagePaths = await this.uploadBranchImages(id, files);
+      const existingImages = (branch as { images?: unknown }).images;
+      const images = [...getBranchImages(existingImages), ...storagePaths];
+      updated = await this.prisma.branch.update({
+        where: { id },
+        data: { images },
+        include: {
+          _count: {
+            select: {
+              admins: true,
+              members: true,
+            },
+          },
+        },
+      });
+    }
+
+    return this.withSignedBranchImages(updated);
   }
 
   async updateStatus(id: string, status: BranchStatus) {
@@ -231,9 +331,47 @@ export class BranchesService {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
 
-    return this.prisma.branch.update({
+    const updated = await this.prisma.branch.update({
       where: { id },
       data: { status },
     });
+
+    return this.withSignedBranchImages(updated);
+  }
+
+  async uploadImage(
+    branchId: string,
+    file: Express.Multer.File,
+    _uploadedBy: string,
+  ) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!branch) {
+      throw new NotFoundException(`Branch with id ${branchId} not found`);
+    }
+
+    const storagePath = await this.documentsService.uploadToStorage(
+      file,
+      'branch',
+      branchId,
+    );
+    const existingImages = (branch as { images?: unknown }).images;
+    const images = [...getBranchImages(existingImages), storagePath];
+
+    const updatedBranch = await this.prisma.branch.update({
+      where: { id: branchId },
+      data: { images },
+    });
+    const url = await this.documentsService.getSignedUrl(storagePath);
+
+    const branchWithUrls = await this.withSignedBranchImages(updatedBranch);
+
+    return {
+      branch: branchWithUrls,
+      storagePath,
+      url,
+      images: branchWithUrls.images,
+    };
   }
 }
