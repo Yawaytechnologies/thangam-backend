@@ -486,7 +486,7 @@ export class AdminsService {
       'PROFILE_PHOTO',
     );
 
-    return { ...admin, profilePhotoUrl };
+    return { ...admin, photo: profilePhotoUrl, profilePhotoUrl };
   }
 
   async uploadProfilePhoto(

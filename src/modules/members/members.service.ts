@@ -345,6 +345,7 @@ export class MembersService {
 
     return {
       ...member,
+      photo: profilePhotoUrl,
       profilePhotoUrl,
       downlineSummary: {
         directorCount,
