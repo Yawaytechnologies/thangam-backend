@@ -164,7 +164,6 @@ model Branch {
   name       String
   branchType String?      @map("branch_type")
   phone      String?
-  email      String?
   address    String?
   city       String?
   district   String?

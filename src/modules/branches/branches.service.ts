@@ -100,7 +100,6 @@ export class BranchesService {
         name: branchData.name,
         branchType: branchData.branchType,
         phone: branchData.phone,
-        email: branchData.email,
         address: branchData.address,
         city: branchData.city,
         district: branchData.district,
@@ -272,7 +271,6 @@ export class BranchesService {
           branchType: branchData.branchType,
         }),
         ...(branchData.phone !== undefined && { phone: branchData.phone }),
-        ...(branchData.email !== undefined && { email: branchData.email }),
         ...(branchData.address !== undefined && {
           address: branchData.address,
         }),
