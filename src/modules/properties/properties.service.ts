@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Billing, WorkflowStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -204,6 +208,20 @@ export class PropertiesService {
     files: Express.Multer.File[],
     uploadedBy: string,
   ) {
+    if (!files.length)
+      throw new BadRequestException('At least one image file is required');
+
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+    const MAX_BYTES = 5 * 1024 * 1024;
+    for (const file of files) {
+      if (!ALLOWED_MIME.includes(file.mimetype))
+        throw new BadRequestException(
+          'Only JPEG, PNG, and WebP images are allowed',
+        );
+      if (file.size > MAX_BYTES)
+        throw new BadRequestException('Each image must be 5 MB or smaller');
+    }
+
     const property = await this.prisma.property.findUnique({
       where: { id: propertyId },
     });
@@ -211,16 +229,15 @@ export class PropertiesService {
       throw new NotFoundException(`Property with id ${propertyId} not found`);
 
     await Promise.all(
-      files.map(async (file) => {
-        const document = await this.documentsService.upload(
+      files.map((file) =>
+        this.documentsService.upload(
           file,
           'property',
           propertyId,
           'PROPERTY_IMAGE',
           uploadedBy,
-        );
-        return this.documentsService.getSignedUrl(document.storagePath);
-      }),
+        ),
+      ),
     );
 
     return this.findOne(propertyId);
