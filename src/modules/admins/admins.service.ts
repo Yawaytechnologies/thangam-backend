@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
   Optional,
 } from '@nestjs/common';
 import { Prisma, Role, UserStatus } from '@prisma/client';
@@ -511,5 +512,28 @@ export class AdminsService {
     );
 
     return { document, profilePhotoUrl };
+  }
+
+  async resetPassword(adminId: string, newPassword: string) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, userId: true, fullName: true },
+    });
+    if (!admin)
+      throw new NotFoundException(`Admin with id ${adminId} not found`);
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException(
+        'New password must be at least 6 characters',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: admin.userId },
+      data: { passwordHash },
+    });
+
+    return { message: `Password reset successfully for ${admin.fullName}` };
   }
 }

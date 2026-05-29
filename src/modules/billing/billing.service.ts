@@ -159,11 +159,18 @@ export class BillingService {
           amountInNumbers: dto.amountInNumbers,
           amountInWords,
           totalReceived: dto.totalReceived,
-          totalBalance: dto.totalBalance ?? 0,
+          totalBalance:
+            dto.totalBalance ??
+            Math.max(0, dto.amountInNumbers - dto.totalReceived),
           operationalNotes: dto.operationalNotes,
           settlementNotes: dto.settlementNotes,
           termsConditions: dto.termsConditions,
           signatureUrl: dto.signatureUrl,
+          bankName: dto.bankName,
+          favourOf: dto.favourOf,
+          chequeNumber: dto.chequeNumber,
+          chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : undefined,
+          gpayReference: dto.gpayReference,
           status: BillingStatus.PENDING,
         },
       });
@@ -283,6 +290,17 @@ export class BillingService {
           termsConditions: dto.termsConditions,
         }),
         ...(dto.status !== undefined && { status: dto.status }),
+        ...(dto.bankName !== undefined && { bankName: dto.bankName }),
+        ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
+        ...(dto.chequeNumber !== undefined && {
+          chequeNumber: dto.chequeNumber,
+        }),
+        ...(dto.chequeDate !== undefined && {
+          chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : null,
+        }),
+        ...(dto.gpayReference !== undefined && {
+          gpayReference: dto.gpayReference,
+        }),
       },
       include: {
         booking: {

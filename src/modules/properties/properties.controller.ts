@@ -8,11 +8,11 @@ import {
   Post,
   Put,
   Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -22,7 +22,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { ImageFilePipe } from '../../common/pipes/image-file.pipe';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -111,24 +110,25 @@ export class PropertiesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Post(':id/images')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FilesInterceptor('images', 10))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
-    summary: 'Upload a property image (JPEG/PNG/WebP, max 5 MB)',
+    summary: 'Upload up to 10 property images (JPEG/PNG/WebP, max 5 MB each)',
   })
   @ApiParam({ name: 'id', description: 'Property UUID' })
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file'],
-      properties: { file: { type: 'string', format: 'binary' } },
+      properties: {
+        images: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
     },
   })
-  uploadImage(
+  uploadImages(
     @Param('id', ParseUUIDPipe) id: string,
-    @UploadedFile(ImageFilePipe) file: Express.Multer.File,
+    @UploadedFiles() files: Express.Multer.File[],
     @CurrentUser('id') uploadedBy: string,
   ) {
-    return this.propertiesService.uploadImage(id, file, uploadedBy);
+    return this.propertiesService.uploadImages(id, files ?? [], uploadedBy);
   }
 }

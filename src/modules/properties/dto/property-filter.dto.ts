@@ -43,4 +43,9 @@ export class PropertyFilterDto {
   @Min(1)
   @IsOptional()
   limit?: number = 20;
+
+  @ApiPropertyOptional({ description: 'Filter by branch UUID' })
+  @IsString()
+  @IsOptional()
+  branchId?: string;
 }
