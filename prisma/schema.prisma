@@ -190,15 +190,8 @@ model Admin {
   userId      String     @unique @map("user_id")
   branchId    String     @map("branch_id")
   fullName    String     @map("full_name")
-  gender      String?
-  dateOfBirth DateTime?  @map("date_of_birth")
   phone       String
   email       String?
-  address     String?
-  city        String?
-  district    String?
-  state       String?
-  pincode     String?
   status      UserStatus @default(ACTIVE)
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")

@@ -7,7 +7,6 @@ import {
   MinLength,
   IsEnum,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserStatus } from '@prisma/client';
 
@@ -16,19 +15,6 @@ export class CreateAdminDto {
   @IsString()
   @IsNotEmpty()
   fullName: string;
-
-  @ApiPropertyOptional({ example: 'Male' })
-  @IsString()
-  @IsOptional()
-  gender?: string;
-
-  @ApiPropertyOptional({
-    example: '1985-06-15',
-    description: 'Date of birth (ISO string)',
-  })
-  @Transform(({ value }) => (value ? new Date(value) : undefined))
-  @IsOptional()
-  dateOfBirth?: Date;
 
   @ApiProperty({ example: '9876543210' })
   @IsString()
@@ -39,31 +25,6 @@ export class CreateAdminDto {
   @IsEmail()
   @IsOptional()
   email?: string;
-
-  @ApiPropertyOptional({ example: '45, Mount Road' })
-  @IsString()
-  @IsOptional()
-  address?: string;
-
-  @ApiPropertyOptional({ example: 'Chennai' })
-  @IsString()
-  @IsOptional()
-  city?: string;
-
-  @ApiPropertyOptional({ example: 'Chennai' })
-  @IsString()
-  @IsOptional()
-  district?: string;
-
-  @ApiPropertyOptional({ example: 'Tamil Nadu' })
-  @IsString()
-  @IsOptional()
-  state?: string;
-
-  @ApiPropertyOptional({ example: '600001' })
-  @IsString()
-  @IsOptional()
-  pincode?: string;
 
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   @IsUUID()
