@@ -460,7 +460,6 @@ export class AdminsService {
             state: true,
             status: true,
             phone: true,
-            email: true,
           },
         },
         user: {

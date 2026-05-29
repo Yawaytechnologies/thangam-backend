@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEmail,
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -33,11 +32,6 @@ export class CreateBranchDto {
   })
   @IsOptional()
   phone?: string;
-
-  @ApiPropertyOptional({ example: 'chennai@srithangam.com' })
-  @IsEmail()
-  @IsOptional()
-  email?: string;
 
   @ApiPropertyOptional({ example: '12, Anna Salai' })
   @IsString()
