@@ -39,6 +39,10 @@ export class PropertiesService {
       where.workflowStatus = filters.workflowStatus;
     }
 
+    if (filters.branchId) {
+      where.branchId = filters.branchId;
+    }
+
     const [total, properties] = await this.prisma.$transaction([
       this.prisma.property.count({ where }),
       this.prisma.property.findMany({
@@ -193,6 +197,33 @@ export class PropertiesService {
     const url = await this.documentsService.getSignedUrl(document.storagePath);
 
     return { document, url };
+  }
+
+  async uploadImages(
+    propertyId: string,
+    files: Express.Multer.File[],
+    uploadedBy: string,
+  ) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property)
+      throw new NotFoundException(`Property with id ${propertyId} not found`);
+
+    await Promise.all(
+      files.map(async (file) => {
+        const document = await this.documentsService.upload(
+          file,
+          'property',
+          propertyId,
+          'PROPERTY_IMAGE',
+          uploadedBy,
+        );
+        return this.documentsService.getSignedUrl(document.storagePath);
+      }),
+    );
+
+    return this.findOne(propertyId);
   }
 
   async getWorkflow(id: string) {

@@ -82,8 +82,8 @@ export class DashboardService {
     return {
       totalMembers,
       membersToday,
-      membersThisWeek,
-      membersThisMonth,
+      joinedThisWeek: membersThisWeek,
+      joinedThisMonth: membersThisMonth,
       totalDirectors,
       activeMembers,
       totalBranches,

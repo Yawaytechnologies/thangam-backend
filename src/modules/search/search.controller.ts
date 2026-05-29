@@ -19,9 +19,9 @@ export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
   @Get('global')
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({
-    summary: 'Global search across all entities (SUPER_ADMIN only)',
+    summary: 'Global search across all entities',
   })
   @ApiQuery({ name: 'query', type: String, description: 'Search term' })
   globalSearch(@Query('query') query: string) {

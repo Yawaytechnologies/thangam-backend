@@ -131,4 +131,15 @@ export class AdminsController {
   ) {
     return this.adminsService.uploadProfilePhoto(id, file, uploadedBy);
   }
+
+  @Post('admins/:id/reset-password')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Reset admin password (SUPER_ADMIN only)' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { newPassword: string },
+  ) {
+    return this.adminsService.resetPassword(id, body.newPassword);
+  }
 }

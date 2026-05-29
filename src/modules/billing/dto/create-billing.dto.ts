@@ -95,4 +95,29 @@ export class CreateBillingDto {
   @IsString()
   @IsOptional()
   signatureUrl?: string;
+
+  @ApiPropertyOptional({ example: 'HDFC Bank' })
+  @IsString()
+  @IsOptional()
+  bankName?: string;
+
+  @ApiPropertyOptional({ example: 'Sri Thangam Housing' })
+  @IsString()
+  @IsOptional()
+  favourOf?: string;
+
+  @ApiPropertyOptional({ example: '123456' })
+  @IsString()
+  @IsOptional()
+  chequeNumber?: string;
+
+  @ApiPropertyOptional({ example: '2024-03-15' })
+  @IsString()
+  @IsOptional()
+  chequeDate?: string;
+
+  @ApiPropertyOptional({ example: 'UPI-REF-9840012345' })
+  @IsString()
+  @IsOptional()
+  gpayReference?: string;
 }
