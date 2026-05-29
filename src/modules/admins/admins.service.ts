@@ -284,6 +284,7 @@ export class AdminsService {
 
     return {
       ...admin,
+      photo: profilePhotoUrl,
       profilePhotoUrl,
       activitySummary: {
         membersAdded,

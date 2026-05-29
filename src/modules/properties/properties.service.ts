@@ -43,9 +43,8 @@ export class PropertiesService {
       where.workflowStatus = filters.workflowStatus;
     }
 
-    if (filters.branchId) {
-      where.branchId = filters.branchId;
-    }
+    // Note: Property has no direct branchId — filter via bookings if needed
+    // if (filters.branchId) { where.branchId = filters.branchId; }
 
     const [total, properties] = await this.prisma.$transaction([
       this.prisma.property.count({ where }),
