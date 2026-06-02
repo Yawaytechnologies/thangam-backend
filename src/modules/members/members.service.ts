@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { Role, UserStatus } from '@prisma/client';
+import { DocumentType, Role, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
 import { CreateMemberDto } from './dto/create-member.dto';
@@ -19,6 +19,99 @@ export class MembersService {
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
   ) {}
+
+  private async getProfilePhotoUrlMap(
+    memberIds: string[],
+  ): Promise<Map<string, string | null>> {
+    const uniqueMemberIds = [...new Set(memberIds)].filter(Boolean);
+    const profilePhotoUrls = new Map<string, string | null>(
+      uniqueMemberIds.map((memberId) => [memberId, null]),
+    );
+
+    if (uniqueMemberIds.length === 0) return profilePhotoUrls;
+
+    const profilePhotos = await this.prisma.document.findMany({
+      where: {
+        entityType: 'member',
+        entityId: { in: uniqueMemberIds },
+        documentType: DocumentType.PROFILE_PHOTO,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        entityId: true,
+        storagePath: true,
+      },
+    });
+
+    const latestProfilePhotos = new Map<string, string>();
+    for (const profilePhoto of profilePhotos) {
+      if (!latestProfilePhotos.has(profilePhoto.entityId)) {
+        latestProfilePhotos.set(
+          profilePhoto.entityId,
+          profilePhoto.storagePath,
+        );
+      }
+    }
+
+    await Promise.all(
+      [...latestProfilePhotos.entries()].map(
+        async ([memberId, storagePath]) => {
+          try {
+            profilePhotoUrls.set(
+              memberId,
+              await this.documentsService.getSignedUrl(storagePath),
+            );
+          } catch {
+            profilePhotoUrls.set(memberId, null);
+          }
+        },
+      ),
+    );
+
+    return profilePhotoUrls;
+  }
+
+  private async attachProfilePhotoUrls<T extends { id: string }>(
+    members: T[],
+  ): Promise<
+    Array<T & { photo: string | null; profilePhotoUrl: string | null }>
+  > {
+    const profilePhotoUrls = await this.getProfilePhotoUrlMap(
+      members.map((member) => member.id),
+    );
+
+    return members.map((member) => {
+      const profilePhotoUrl = profilePhotoUrls.get(member.id) ?? null;
+      return {
+        ...member,
+        photo: profilePhotoUrl,
+        profilePhotoUrl,
+      };
+    });
+  }
+
+  private async attachSignedUrlsToImageDocuments<
+    T extends { storagePath: string; mimeType: string | null },
+  >(documents: T[]): Promise<Array<T & { signedUrl: string | null }>> {
+    return Promise.all(
+      documents.map(async (document) => {
+        if (!document.mimeType?.startsWith('image/')) {
+          return { ...document, signedUrl: null };
+        }
+
+        try {
+          return {
+            ...document,
+            signedUrl: await this.documentsService.getSignedUrl(
+              document.storagePath,
+            ),
+          };
+        } catch {
+          return { ...document, signedUrl: null };
+        }
+      }),
+    );
+  }
 
   // ─── Hierarchy helpers ────────────────────────────────────────────────────
 
@@ -125,7 +218,12 @@ export class MembersService {
       this.prisma.member.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: await this.attachProfilePhotoUrls(data),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ─── create ───────────────────────────────────────────────────────────────
@@ -337,14 +435,15 @@ export class MembersService {
         }),
       ]);
 
-    const profilePhotoUrl = await this.documentsService.getLatestSignedUrl(
-      'member',
-      id,
-      'PROFILE_PHOTO',
-    );
+    const [profilePhotoUrl, documents] = await Promise.all([
+      this.documentsService.getLatestSignedUrl('member', id, 'PROFILE_PHOTO'),
+      this.attachSignedUrlsToImageDocuments(member.documents),
+    ]);
 
     return {
       ...member,
+      documents,
+      images: documents.filter((document) => document.signedUrl),
       photo: profilePhotoUrl,
       profilePhotoUrl,
       downlineSummary: {
@@ -537,7 +636,7 @@ export class MembersService {
         },
       });
       return {
-        data: self ? [self] : [],
+        data: self ? await this.attachProfilePhotoUrls([self]) : [],
         total: self ? 1 : 0,
         page,
         limit,
@@ -579,7 +678,12 @@ export class MembersService {
       this.prisma.member.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: await this.attachProfilePhotoUrls(data),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ─── getMemberBottomSheet ─────────────────────────────────────────────────
