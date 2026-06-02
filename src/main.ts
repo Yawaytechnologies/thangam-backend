@@ -49,10 +49,22 @@ async function bootstrap() {
       .setTitle('Sri Thangam Housing API')
       .setDescription('Real estate operations management API')
       .setVersion('1.0')
-      .addBearerAuth()
+      .addBearerAuth({
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        in: 'header',
+        description:
+          'Paste the accessToken returned by POST /auth/login. Do not include "Bearer"; Swagger adds it automatically.',
+      })
       .build();
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
     logger.log('Swagger docs available at /api/docs');
   }
 

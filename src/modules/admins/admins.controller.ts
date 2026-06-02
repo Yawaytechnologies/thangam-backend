@@ -23,14 +23,22 @@ import {
   ApiParam,
   ApiConsumes,
   ApiBody,
+  ApiProperty,
 } from '@nestjs/swagger';
 import { ImageFilePipe } from '../../common/pipes/image-file.pipe';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsString, MinLength } from 'class-validator';
 import { Role, UserStatus } from '@prisma/client';
 
 class UpdateAdminStatusDto {
   @IsEnum(UserStatus)
-  status: UserStatus;
+  status!: UserStatus;
+}
+
+class ResetAdminPasswordDto {
+  @ApiProperty({ example: 'Admin@123', minLength: 6 })
+  @IsString()
+  @MinLength(6)
+  newPassword!: string;
 }
 import { AdminsService } from './admins.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -136,9 +144,10 @@ export class AdminsController {
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Reset admin password (SUPER_ADMIN only)' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiBody({ type: ResetAdminPasswordDto })
   resetPassword(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { newPassword: string },
+    @Body() body: ResetAdminPasswordDto,
   ) {
     return this.adminsService.resetPassword(id, body.newPassword);
   }
