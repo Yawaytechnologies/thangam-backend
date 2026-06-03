@@ -22,7 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Role } from '@prisma/client';
+import { DocumentType, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -130,5 +130,48 @@ export class PropertiesController {
     @CurrentUser('id') uploadedBy: string,
   ) {
     return this.propertiesService.uploadImages(id, files ?? [], uploadedBy);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Post(':id/documents')
+  @UseInterceptors(FilesInterceptor('documents', 10))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload up to 10 documents for a property',
+  })
+  @ApiParam({ name: 'id', description: 'Property UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['documents', 'documentType'],
+      properties: {
+        documents: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+        documentType: {
+          type: 'string',
+          enum: [
+            DocumentType.LAYOUT_DOCUMENT,
+            DocumentType.APPROVAL_DOCUMENT,
+            DocumentType.BROCHURE,
+          ],
+        },
+      },
+    },
+  })
+  uploadDocuments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('documentType') documentType: DocumentType,
+    @CurrentUser('id') uploadedBy: string,
+  ) {
+    return this.propertiesService.uploadDocuments(
+      id,
+      files ?? [],
+      documentType,
+      uploadedBy,
+    );
   }
 }

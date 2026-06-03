@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Billing, WorkflowStatus } from '@prisma/client';
+import { Billing, Document, DocumentType, WorkflowStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
 import { generatePropertyId } from '../../common/utils/id-generator.util';
@@ -14,10 +14,33 @@ import { PropertyFilterDto } from './dto/property-filter.dto';
 
 @Injectable()
 export class PropertiesService {
+  private readonly propertyDocumentTypes: DocumentType[] = [
+    DocumentType.LAYOUT_DOCUMENT,
+    DocumentType.APPROVAL_DOCUMENT,
+    DocumentType.BROCHURE,
+  ];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
   ) {}
+
+  private async attachSignedUrls(documents: Document[]) {
+    return Promise.all(
+      documents.map(async (doc) => {
+        try {
+          return {
+            ...doc,
+            signedUrl: await this.documentsService.getSignedUrl(
+              doc.storagePath,
+            ),
+          };
+        } catch {
+          return { ...doc, signedUrl: null };
+        }
+      }),
+    );
+  }
 
   async findAll(filters: PropertyFilterDto) {
     const page = filters.page ?? 1;
@@ -68,18 +91,35 @@ export class PropertiesService {
           _count: {
             select: { bookings: true },
           },
+          documents: true,
         },
       }),
     ]);
 
-    const data = properties.map((p) => ({
-      ...p,
-      bookingCount: p._count.bookings,
-      latestBookingStatus: p.bookings[0]?.status ?? null,
-      latestBooking: p.bookings[0] ?? null,
-      _count: undefined,
-      bookings: undefined,
-    }));
+    const data = await Promise.all(
+      properties.map(async (p) => {
+        const documentsWithUrls = await this.attachSignedUrls(p.documents);
+
+        return {
+          ...p,
+          documents: documentsWithUrls.filter(
+            (doc) => doc.documentType !== DocumentType.PROPERTY_IMAGE,
+          ),
+          images: documentsWithUrls
+            .filter((doc) => doc.documentType === DocumentType.PROPERTY_IMAGE)
+            .map((doc) => ({
+              id: doc.id,
+              fileName: doc.fileName,
+              url: doc.signedUrl,
+            })),
+          bookingCount: p._count.bookings,
+          latestBookingStatus: p.bookings[0]?.status ?? null,
+          latestBooking: p.bookings[0] ?? null,
+          _count: undefined,
+          bookings: undefined,
+        };
+      }),
+    );
 
     return { data, total, page, limit };
   }
@@ -156,24 +196,20 @@ export class PropertiesService {
       });
     }
 
-    // Attach signed URLs to property images
-    const imageDocs = property.documents.filter(
-      (d) => d.documentType === 'PROPERTY_IMAGE',
-    );
-    const images = await Promise.all(
-      imageDocs.map(async (doc) => {
-        try {
-          const url = await this.documentsService.getSignedUrl(doc.storagePath);
-          return { id: doc.id, fileName: doc.fileName, url };
-        } catch {
-          return { id: doc.id, fileName: doc.fileName, url: null };
-        }
-      }),
-    );
+    const documentsWithUrls = await this.attachSignedUrls(property.documents);
 
     return {
       ...property,
-      images,
+      documents: documentsWithUrls.filter(
+        (doc) => doc.documentType !== DocumentType.PROPERTY_IMAGE,
+      ),
+      images: documentsWithUrls
+        .filter((doc) => doc.documentType === DocumentType.PROPERTY_IMAGE)
+        .map((doc) => ({
+          id: doc.id,
+          fileName: doc.fileName,
+          url: doc.signedUrl,
+        })),
       latestBooking: property.bookings[0] ?? null,
       latestBilling,
     };
@@ -194,7 +230,7 @@ export class PropertiesService {
       file,
       'property',
       propertyId,
-      'PROPERTY_IMAGE',
+      DocumentType.PROPERTY_IMAGE,
       uploadedBy,
     );
     const url = await this.documentsService.getSignedUrl(document.storagePath);
@@ -233,7 +269,52 @@ export class PropertiesService {
           file,
           'property',
           propertyId,
-          'PROPERTY_IMAGE',
+          DocumentType.PROPERTY_IMAGE,
+          uploadedBy,
+        ),
+      ),
+    );
+
+    return this.findOne(propertyId);
+  }
+
+  async uploadDocuments(
+    propertyId: string,
+    files: Express.Multer.File[],
+    documentType: DocumentType,
+    uploadedBy: string,
+  ) {
+    if (!files.length) {
+      throw new BadRequestException('At least one document file is required');
+    }
+
+    if (!this.propertyDocumentTypes.includes(documentType)) {
+      throw new BadRequestException(
+        `documentType must be one of: ${this.propertyDocumentTypes.join(', ')}`,
+      );
+    }
+
+    const MAX_BYTES = 10 * 1024 * 1024;
+    for (const file of files) {
+      if (file.size > MAX_BYTES) {
+        throw new BadRequestException('Each document must be 10 MB or smaller');
+      }
+    }
+
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property) {
+      throw new NotFoundException(`Property with id ${propertyId} not found`);
+    }
+
+    await Promise.all(
+      files.map((file) =>
+        this.documentsService.upload(
+          file,
+          'property',
+          propertyId,
+          documentType,
           uploadedBy,
         ),
       ),
@@ -263,13 +344,15 @@ export class PropertiesService {
       throw new NotFoundException(`Property with id ${id} not found`);
     }
 
-    return this.prisma.document.findMany({
+    const documents = await this.prisma.document.findMany({
       where: {
         entityType: 'property',
         entityId: id,
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return this.attachSignedUrls(documents);
   }
 
   async update(id: string, dto: UpdatePropertyDto, _userId: string) {
