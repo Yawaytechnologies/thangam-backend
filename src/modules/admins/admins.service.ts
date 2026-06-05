@@ -5,7 +5,7 @@ import {
   BadRequestException,
   Optional,
 } from '@nestjs/common';
-import { Prisma, Role, UserStatus } from '@prisma/client';
+import { DocumentType, Prisma, Role, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import 'multer';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,6 +23,61 @@ export class AdminsService {
     private readonly documentsService: DocumentsService,
     @Optional() private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async attachProfilePhotoUrls<T extends { id: string }>(
+    admins: T[],
+  ): Promise<
+    Array<T & { photo: string | null; profilePhotoUrl: string | null }>
+  > {
+    const adminIds = [...new Set(admins.map((admin) => admin.id))];
+    if (adminIds.length === 0) return [];
+
+    const profilePhotos = await this.prisma.document.findMany({
+      where: {
+        entityType: 'admin',
+        entityId: { in: adminIds },
+        documentType: DocumentType.PROFILE_PHOTO,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        entityId: true,
+        storagePath: true,
+      },
+    });
+
+    const latestProfilePhotos = new Map<string, string>();
+    for (const profilePhoto of profilePhotos) {
+      if (!latestProfilePhotos.has(profilePhoto.entityId)) {
+        latestProfilePhotos.set(
+          profilePhoto.entityId,
+          profilePhoto.storagePath,
+        );
+      }
+    }
+
+    const profilePhotoUrls = new Map<string, string | null>();
+    await Promise.all(
+      [...latestProfilePhotos.entries()].map(async ([adminId, storagePath]) => {
+        try {
+          profilePhotoUrls.set(
+            adminId,
+            await this.documentsService.getSignedUrl(storagePath),
+          );
+        } catch {
+          profilePhotoUrls.set(adminId, null);
+        }
+      }),
+    );
+
+    return admins.map((admin) => {
+      const profilePhotoUrl = profilePhotoUrls.get(admin.id) ?? null;
+      return {
+        ...admin,
+        photo: profilePhotoUrl,
+        profilePhotoUrl,
+      };
+    });
+  }
 
   private async generateNextAdminId(
     tx: Prisma.TransactionClient,
@@ -107,7 +162,12 @@ export class AdminsService {
       this.prisma.admin.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: await this.attachProfilePhotoUrls(data),
+      total,
+      page,
+      limit,
+    };
   }
 
   async create(dto: CreateAdminDto, createdById: string) {
