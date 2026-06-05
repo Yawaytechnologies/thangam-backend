@@ -139,7 +139,6 @@ export class PropertiesService {
           propertyType: dto.propertyType,
           squareFeet: dto.squareFeet,
           facing: dto.facing,
-          approvalStatus: dto.approvalStatus,
           address: dto.address,
           city: dto.city,
           district: dto.district,
@@ -377,9 +376,6 @@ export class PropertiesService {
         }),
         ...(dto.squareFeet !== undefined && { squareFeet: dto.squareFeet }),
         ...(dto.facing !== undefined && { facing: dto.facing }),
-        ...(dto.approvalStatus !== undefined && {
-          approvalStatus: dto.approvalStatus,
-        }),
         ...(dto.address !== undefined && { address: dto.address }),
         ...(dto.city !== undefined && { city: dto.city }),
         ...(dto.district !== undefined && { district: dto.district }),
