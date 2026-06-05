@@ -266,7 +266,6 @@ model Property {
   propertyType   PropertyType   @map("property_type")
   squareFeet     Float?         @map("square_feet")
   facing         String?
-  approvalStatus String?        @map("approval_status")
   address        String?
   city           String?
   district       String?

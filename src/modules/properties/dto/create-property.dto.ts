@@ -46,11 +46,6 @@ export class CreatePropertyDto {
   @IsOptional()
   facing?: string;
 
-  @ApiPropertyOptional({ description: 'Approval status of the property' })
-  @IsString()
-  @IsOptional()
-  approvalStatus?: string;
-
   @ApiPropertyOptional({ description: 'Street address' })
   @IsString()
   @IsOptional()
