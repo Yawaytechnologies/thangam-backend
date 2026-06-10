@@ -178,7 +178,6 @@ export class BookingsService {
           edDdSmBmName: dto.edDdSmBmName,
           referenceCode: dto.referenceCode,
           directorName: dto.directorName,
-          signatureUrl: dto.signatureUrl,
           status: BookingStatus.BOOKING_INITIATED,
         },
       });
@@ -346,9 +345,6 @@ export class BookingsService {
           }),
           ...(dto.directorName !== undefined && {
             directorName: dto.directorName,
-          }),
-          ...(dto.signatureUrl !== undefined && {
-            signatureUrl: dto.signatureUrl,
           }),
         },
       });
@@ -528,7 +524,6 @@ export class BookingsService {
       edDdSmBmName: booking.edDdSmBmName ?? undefined,
       referenceCode: booking.referenceCode ?? undefined,
       directorName: booking.directorName ?? undefined,
-      signatureUrl: booking.signatureUrl ?? undefined,
       payments: booking.payments.map((p) => ({
         paymentMethod: p.paymentMethod,
         bankName: p.bankName ?? undefined,
