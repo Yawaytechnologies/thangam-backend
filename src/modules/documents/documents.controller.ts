@@ -3,12 +3,14 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -68,6 +70,70 @@ export class DocumentsController {
       entityType,
       entityId,
       documentType,
+      uploadedBy,
+    );
+  }
+
+  @Post('bookings/:bookingId/images')
+  @UseInterceptors(FilesInterceptor('booking_images', 10))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload up to 10 booking images using booking_images field',
+  })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['booking_images'],
+      properties: {
+        booking_images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Booking images. JPEG, PNG, or WebP up to 5 MB each',
+        },
+      },
+    },
+  })
+  uploadBookingImages(
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser('id') uploadedBy: string,
+  ) {
+    return this.documentsService.uploadBookingImages(
+      bookingId,
+      files ?? [],
+      uploadedBy,
+    );
+  }
+
+  @Post('billing/:billingId/images')
+  @UseInterceptors(FilesInterceptor('billing_images', 10))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload up to 10 billing images using billing_images field',
+  })
+  @ApiParam({ name: 'billingId', description: 'Billing UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['billing_images'],
+      properties: {
+        billing_images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Billing images. JPEG, PNG, or WebP up to 5 MB each',
+        },
+      },
+    },
+  })
+  uploadBillingImages(
+    @Param('billingId', ParseUUIDPipe) billingId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser('id') uploadedBy: string,
+  ) {
+    return this.documentsService.uploadBillingImages(
+      billingId,
+      files ?? [],
       uploadedBy,
     );
   }
