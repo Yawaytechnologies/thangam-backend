@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Optional,
 } from '@nestjs/common';
-import { BranchStatus } from '@prisma/client';
+import { BranchStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -20,6 +20,11 @@ const getBranchImages = (images: unknown): string[] => {
 
 const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+type AuthenticatedUser = {
+  id: string;
+  role: Role;
+};
 
 @Injectable()
 export class BranchesService {
@@ -76,51 +81,29 @@ export class BranchesService {
 
   async create(
     dto: CreateBranchDto,
-    userId: string,
+    user: AuthenticatedUser,
     files: Express.Multer.File[] = [],
   ) {
-    const existingCount = await this.prisma.branch.count();
-    const branchCode = generateBranchCode(existingCount + 1);
+    const { adminId, ...branchData } = dto;
+    const assignableAdminId = await this.resolveAssignableAdminId(
+      adminId,
+      user,
+    );
 
-    // If adminId is provided, verify the admin exists
-    if (dto.adminId) {
-      const admin = await this.prisma.admin.findUnique({
-        where: { id: dto.adminId },
-      });
-      if (!admin) {
-        throw new NotFoundException(`Admin with id ${dto.adminId} not found`);
+    let branch: Awaited<ReturnType<typeof this.createBranchRecord>> | undefined;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        branch = await this.createBranchRecord(branchData, assignableAdminId);
+        break;
+      } catch (error) {
+        if (!this.isBranchCodeConflict(error) || attempt === 3) {
+          throw error;
+        }
       }
     }
-
-    const { adminId, ...branchData } = dto;
-
-    let branch = await this.prisma.branch.create({
-      data: {
-        branchCode,
-        name: branchData.name,
-        branchType: branchData.branchType,
-        phone: branchData.phone,
-        address: branchData.address,
-        city: branchData.city,
-        district: branchData.district,
-        state: branchData.state,
-        pincode: branchData.pincode,
-        ...(adminId && {
-          admins: {
-            connect: { id: adminId },
-          },
-        }),
-      },
-      include: {
-        admins: true,
-        _count: {
-          select: {
-            admins: true,
-            members: true,
-          },
-        },
-      },
-    });
+    if (!branch) {
+      throw new Error('Failed to create branch');
+    }
 
     if (files.length > 0) {
       const storagePaths = await this.uploadBranchImages(branch.id, files);
@@ -147,7 +130,7 @@ export class BranchesService {
           title: 'Branch Created',
           message: `New branch "${branch.name}" (${branch.branchCode}) has been created.`,
           type: 'BRANCH_ACTIVITY',
-          triggeredById: userId,
+          triggeredById: user.id,
           branchId: branch.id,
         });
       } catch {
@@ -156,6 +139,107 @@ export class BranchesService {
     }
 
     return this.withSignedBranchImages(branch);
+  }
+
+  private async createBranchRecord(
+    branchData: Omit<CreateBranchDto, 'adminId'>,
+    assignableAdminId: string | undefined,
+  ) {
+    const branchCode = await this.generateNextBranchCode();
+
+    return this.prisma.branch.create({
+      data: {
+        branchCode,
+        name: branchData.name,
+        branchType: branchData.branchType,
+        phone: branchData.phone,
+        address: branchData.address,
+        city: branchData.city,
+        district: branchData.district,
+        state: branchData.state,
+        pincode: branchData.pincode,
+        ...(assignableAdminId && {
+          admins: {
+            connect: { id: assignableAdminId },
+          },
+        }),
+      },
+      include: {
+        admins: true,
+        _count: {
+          select: {
+            admins: true,
+            members: true,
+          },
+        },
+      },
+    });
+  }
+
+  private async generateNextBranchCode(): Promise<string> {
+    const branches = await this.prisma.branch.findMany({
+      select: { branchCode: true },
+    });
+
+    const maxSequence = branches.reduce((max, branch) => {
+      const match = /^STH-BR-(\d+)$/.exec(branch.branchCode);
+      if (!match) return max;
+
+      const sequence = Number(match[1]);
+      return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+    }, 0);
+
+    return generateBranchCode(maxSequence + 1);
+  }
+
+  private isBranchCodeConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta.target.includes('branch_code')
+    );
+  }
+
+  private async resolveAssignableAdminId(
+    adminId: string | undefined,
+    user: AuthenticatedUser,
+  ) {
+    if (!adminId) return undefined;
+
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+    if (admin) return admin.id;
+
+    if (user.role === Role.SUPER_ADMIN && adminId === user.id) {
+      return undefined;
+    }
+
+    const userForAdminId = await this.prisma.user.findUnique({
+      where: { id: adminId },
+      select: {
+        id: true,
+        role: true,
+        admin: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (userForAdminId?.admin) {
+      return userForAdminId.admin.id;
+    }
+
+    if (userForAdminId?.role === Role.SUPER_ADMIN) {
+      throw new BadRequestException(
+        'adminId must be an existing branch admin id. Super admin user ids are not branch admins.',
+      );
+    }
+
+    throw new NotFoundException(`Admin with id ${adminId} not found`);
   }
 
   private async uploadBranchImages(
