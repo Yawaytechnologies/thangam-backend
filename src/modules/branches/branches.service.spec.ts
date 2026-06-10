@@ -3,6 +3,30 @@ import { Role } from '@prisma/client';
 import { BranchesService } from './branches.service';
 
 describe('BranchesService', () => {
+  type BranchCreateArgs = {
+    data: {
+      branchCode: string;
+      name: string;
+      branchType?: string;
+      phone?: string;
+      address?: string;
+      city?: string;
+      district?: string;
+      state?: string;
+      pincode?: string;
+      admins?: {
+        connect: { id: string };
+      };
+    };
+  };
+
+  type AdminRecord = { id: string } | null;
+  type UserRecord = {
+    id: string;
+    role: Role;
+    admin: { id: string } | null;
+  } | null;
+
   const branch = {
     id: 'branch-1',
     branchCode: 'STH-BR-001',
@@ -28,22 +52,25 @@ describe('BranchesService', () => {
   const createService = () => {
     const prisma = {
       branch: {
-        findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockResolvedValue(branch),
+        findMany: jest.fn<() => Promise<Array<{ branchCode: string }>>>(),
+        create: jest.fn<(args: BranchCreateArgs) => Promise<typeof branch>>(),
       },
       admin: {
-        findUnique: jest.fn(),
+        findUnique: jest.fn<() => Promise<AdminRecord>>(),
       },
       user: {
-        findUnique: jest.fn(),
+        findUnique: jest.fn<() => Promise<UserRecord>>(),
       },
     };
+    prisma.branch.findMany.mockResolvedValue([]);
+    prisma.branch.create.mockResolvedValue(branch);
     const documentsService = {
       getSignedUrl: jest.fn(),
     };
     const notificationsService = {
-      createNotification: jest.fn().mockResolvedValue(undefined),
+      createNotification: jest.fn<(payload: unknown) => Promise<void>>(),
     };
+    notificationsService.createNotification.mockResolvedValue(undefined);
 
     return {
       service: new BranchesService(
