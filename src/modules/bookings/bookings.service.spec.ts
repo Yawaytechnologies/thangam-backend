@@ -207,6 +207,50 @@ describe('BookingsService', () => {
         }),
       );
     });
+
+    it('does not persist signatureUrl from booking payloads', async () => {
+      const createdBooking = {
+        id: 'b1',
+        bookingId: 'STH-BK-0001',
+        status: BookingStatus.BOOKING_INITIATED,
+      };
+      const txCreate = jest.fn().mockResolvedValue(createdBooking);
+
+      mockTransaction.mockImplementation(async (fn: any) =>
+        fn({
+          property: {
+            findUnique: jest
+              .fn()
+              .mockResolvedValue({ id: 'prop-1', workflowStatus: 'AVAILABLE' }),
+            update: jest.fn(),
+          },
+          booking: {
+            count: jest.fn().mockResolvedValue(0),
+            create: txCreate,
+            findUnique: jest.fn().mockResolvedValue({
+              ...createdBooking,
+              payments: [],
+              denominations: [],
+            }),
+          },
+          bookingPayment: { createMany: jest.fn() },
+          bookingDenomination: { createMany: jest.fn() },
+          workflowHistory: { create: jest.fn() },
+        }),
+      );
+
+      await service.create(
+        {
+          ...dto,
+          branchId: 'branch-1',
+          signatureUrl: 'https://storage.example.com/signatures/sig_001.png',
+        } as any,
+        superAdminUser,
+      );
+
+      const createData = txCreate.mock.calls[0][0].data;
+      expect(createData).not.toHaveProperty('signatureUrl');
+    });
   });
 
   // ─── updateStatus ──────────────────────────────────────────────────────────

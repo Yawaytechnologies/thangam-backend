@@ -98,9 +98,9 @@ export class BranchesController {
   create(
     @Body() dto: CreateBranchDto,
     @UploadedFiles() files: BranchImageFiles,
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: any,
   ) {
-    return this.branchesService.create(dto, userId, files.images ?? []);
+    return this.branchesService.create(dto, user, files.images ?? []);
   }
 
   @Get(':id')

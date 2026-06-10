@@ -1,0 +1,2 @@
+-- No-op migration.
+-- The branch email removal is applied by 20260529000100_remove_branch_email.
