@@ -1,19 +1,21 @@
 import {
-  BadRequestException,
-  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
+  MessageType,
   NotificationType,
   NotificationStatus,
   Role,
-  Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationFilterDto } from './dto/notification-filter.dto';
 import { SendMessageDto } from './dto/send-message.dto';
-import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { SmsService } from '../sms/sms.service';
+
+type NotificationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface DispatchPayload {
   title: string;
@@ -55,40 +57,90 @@ interface NotificationViewer {
 
 @Injectable()
 export class NotificationsService {
-  private visibility(user: NotificationViewer): Prisma.NotificationWhereInput {
-    if (user.role === Role.SUPER_ADMIN) return {};
-    const branchId =
-      user.role === Role.ADMIN ? user.admin?.branchId : user.member?.branchId;
-    if (!branchId)
-      throw new ForbiddenException('Your account has no assigned branch');
-    return {
-      OR: [{ branchId }, { branchId: null }],
-      ...(user.role === Role.DIRECTOR
-        ? {
-            type: {
-              in: [
-                NotificationType.ADMIN_ACTIVITY,
-                NotificationType.MEMBER_ACTIVITY,
-                NotificationType.SYSTEM_ACTIVITY,
-                NotificationType.TEAM_ACTIVITY,
-              ],
-            },
-          }
-        : {}),
-    };
-  }
+  private readonly logger = new Logger(NotificationsService.name);
 
   // Gateway is injected via setter to avoid circular dependency
   private gateway: {
     emitToUser(userId: string, event: string, data: any): void;
   } | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly smsService?: SmsService,
+  ) {}
 
   setGateway(gateway: {
     emitToUser(userId: string, event: string, data: any): void;
   }): void {
     this.gateway = gateway;
+  }
+
+  private resolvePriority(
+    payload: Pick<
+      CreateNotificationDto,
+      'title' | 'message' | 'type' | 'priority' | 'relatedModule'
+    >,
+  ): NotificationPriority {
+    const explicitPriority = String(payload.priority ?? '')
+      .trim()
+      .toUpperCase();
+    if (
+      explicitPriority === 'HIGH' ||
+      explicitPriority === 'MEDIUM' ||
+      explicitPriority === 'LOW'
+    ) {
+      return explicitPriority;
+    }
+
+    const text =
+      `${payload.title} ${payload.message} ${payload.type} ${payload.relatedModule ?? ''}`.toLowerCase();
+    const highPrioritySignals = [
+      'delete',
+      'deleted',
+      'deletion',
+      'remove',
+      'removed',
+      'deactivate',
+      'deactivated',
+      'deactivation',
+      'reject',
+      'rejected',
+      'rejection',
+      'cancel',
+      'cancelled',
+      'canceled',
+      'cancellation',
+      'overdue',
+      'payment due',
+      'past due',
+      'refund',
+      'refunded',
+      'security',
+      'unauthorized',
+      'suspicious',
+    ];
+    const mediumPrioritySignals = [
+      'create',
+      'created',
+      'creation',
+      'approve',
+      'approved',
+      'approval',
+      'role change',
+      'role changed',
+      'role updated',
+      'important',
+      'critical update',
+      'major update',
+    ];
+
+    if (highPrioritySignals.some((signal) => text.includes(signal))) {
+      return 'HIGH';
+    }
+    if (mediumPrioritySignals.some((signal) => text.includes(signal))) {
+      return 'MEDIUM';
+    }
+    return 'LOW';
   }
 
   // ─── Backward-compat wrapper ──────────────────────────────────────────────
@@ -99,7 +151,7 @@ export class NotificationsService {
         title: dto.title,
         message: dto.message,
         type: dto.type,
-        priority: dto.priority ?? 'NORMAL',
+        priority: this.resolvePriority(dto),
         relatedModule: dto.relatedModule ?? null,
         relatedEntityId: dto.relatedEntityId ?? null,
         triggeredById: dto.triggeredById ?? null,
@@ -110,11 +162,14 @@ export class NotificationsService {
       },
     });
 
-    if (dto.recipientUserIds && dto.recipientUserIds.length > 0) {
+    const recipientUserIds = await this.resolveRecipientUserIds(dto);
+
+    if (recipientUserIds.size > 0) {
       await this.prisma.notificationRecipient.createMany({
-        data: dto.recipientUserIds.map((userId) => ({
+        data: Array.from(recipientUserIds).map((userId) => ({
           notificationId: notification.id,
           userId,
+          status: NotificationStatus.UNREAD,
         })),
         skipDuplicates: true,
       });
@@ -130,6 +185,8 @@ export class NotificationsService {
       }
     }
 
+    this.emitNotification(notification, recipientUserIds);
+
     return notification;
   }
 
@@ -142,7 +199,7 @@ export class NotificationsService {
         title: payload.title,
         message: payload.message,
         type: payload.type,
-        priority: payload.priority ?? 'NORMAL',
+        priority: this.resolvePriority(payload),
         relatedModule: payload.relatedModule ?? null,
         relatedEntityId: payload.relatedEntityId ?? null,
         triggeredById: payload.triggeredById ?? null,
@@ -154,11 +211,30 @@ export class NotificationsService {
     });
 
     // Step 2: Resolve recipients
-    const recipientUserIds = new Set<string>();
+    const recipientUserIds = await this.resolveRecipientUserIds(payload);
 
-    // Include explicitly targeted users (for example, the member's actual
-    // Director resolved through the reportsToId hierarchy).
-    payload.recipientUserIds?.forEach((userId) => recipientUserIds.add(userId));
+    // Step 3: Create NotificationRecipient records
+    if (recipientUserIds.size > 0) {
+      await this.prisma.notificationRecipient.createMany({
+        data: Array.from(recipientUserIds).map((userId) => ({
+          notificationId: notification.id,
+          userId,
+          status: NotificationStatus.UNREAD,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Step 4: Emit socket event to each recipient
+    this.emitNotification(notification, recipientUserIds);
+  }
+
+  private async resolveRecipientUserIds(
+    payload: CreateNotificationDto | DispatchPayload,
+  ) {
+    const recipientUserIds = new Set<string>(
+      'recipientUserIds' in payload ? (payload.recipientUserIds ?? []) : [],
+    );
 
     // Always include all SUPER_ADMIN users
     const superAdmins = await this.prisma.user.findMany({
@@ -207,38 +283,38 @@ export class NotificationsService {
       }
     }
 
-    // Step 3: Create NotificationRecipient records
-    if (recipientUserIds.size > 0) {
-      await this.prisma.notificationRecipient.createMany({
-        data: Array.from(recipientUserIds).map((userId) => ({
-          notificationId: notification.id,
-          userId,
-          status: NotificationStatus.UNREAD,
-        })),
-        skipDuplicates: true,
-      });
-    }
+    return recipientUserIds;
+  }
 
-    // Step 4: Emit socket event to each recipient
-    if (this.gateway) {
-      const notificationPayload = {
-        id: notification.id,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type,
-        priority: notification.priority,
-        createdAt: notification.createdAt,
-        relatedModule: notification.relatedModule,
-        relatedEntityId: notification.relatedEntityId,
-      };
-      recipientUserIds.forEach((userId) => {
-        this.gateway!.emitToUser(
-          userId,
-          'notification:new',
-          notificationPayload,
-        );
-      });
-    }
+  private emitNotification(
+    notification: {
+      id: string;
+      title: string;
+      message: string;
+      type: NotificationType;
+      priority: string;
+      createdAt: Date;
+      relatedModule: string | null;
+      relatedEntityId: string | null;
+    },
+    recipientUserIds: Set<string>,
+  ) {
+    if (!this.gateway) return;
+
+    const notificationPayload = {
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      priority: notification.priority,
+      createdAt: notification.createdAt,
+      relatedModule: notification.relatedModule,
+      relatedEntityId: notification.relatedEntityId,
+    };
+
+    recipientUserIds.forEach((userId) => {
+      this.gateway!.emitToUser(userId, 'notification:new', notificationPayload);
+    });
   }
 
   // ─── Private: walk reportsTo chain to find first DIRECTOR ─────────────────
@@ -269,7 +345,52 @@ export class NotificationsService {
 
   // ─── findAll ──────────────────────────────────────────────────────────────
 
+  private notificationScopeForUser(user: any, branchId?: string) {
+    if (user.role === Role.SUPER_ADMIN) {
+      return branchId ? { branchId } : {};
+    }
+
+    if (user.role === Role.ADMIN) {
+      return { branchId: user.admin?.branchId ?? '__missing_branch__' };
+    }
+
+    if (user.member?.role === Role.DIRECTOR) {
+      return { branchId: user.member?.branchId ?? '__missing_branch__' };
+    }
+
+    return {};
+  }
+
+  private async ensureRecipientLinksForUser(user: any) {
+    if (typeof user === 'string' || !user?.id) return;
+
+    const notificationScope = this.notificationScopeForUser(user);
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        ...notificationScope,
+        recipients: {
+          none: { userId: user.id },
+        },
+      },
+      select: { id: true },
+      take: 500,
+    });
+
+    if (notifications.length === 0) return;
+
+    await this.prisma.notificationRecipient.createMany({
+      data: notifications.map((notification) => ({
+        notificationId: notification.id,
+        userId: user.id,
+        status: NotificationStatus.UNREAD,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
   async findAll(user: any, filters: NotificationFilterDto) {
+    await this.ensureRecipientLinksForUser(user);
+
     const {
       search,
       type,
@@ -299,8 +420,10 @@ export class NotificationsService {
       ];
     }
 
-    if (user.role === Role.SUPER_ADMIN && branchId)
-      notificationWhere.branchId = branchId;
+    Object.assign(
+      notificationWhere,
+      this.notificationScopeForUser(user, branchId),
+    );
 
     // Build recipient where clause
     const recipientWhere: any = {
@@ -335,7 +458,10 @@ export class NotificationsService {
 
   // ─── findLatest ───────────────────────────────────────────────────────────
 
-  async findLatest(user: NotificationViewer) {
+  async findLatest(user: any) {
+    await this.ensureRecipientLinksForUser(user);
+    const userId = typeof user === 'string' ? user : user.id;
+
     return this.prisma.notificationRecipient.findMany({
       where: { userId: user.id, notification: this.visibility(user) },
       orderBy: { createdAt: 'desc' },
@@ -352,7 +478,10 @@ export class NotificationsService {
 
   // ─── getUnreadCount ───────────────────────────────────────────────────────
 
-  async getUnreadCount(user: NotificationViewer): Promise<number> {
+  async getUnreadCount(user: any): Promise<number> {
+    await this.ensureRecipientLinksForUser(user);
+    const userId = typeof user === 'string' ? user : user.id;
+
     return this.prisma.notificationRecipient.count({
       where: {
         userId: user.id,
@@ -538,5 +667,127 @@ export class NotificationsService {
     });
 
     return notificationMessage;
+  }
+
+  async sendBookingCustomerMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    projectName: string;
+    plotNumber: string;
+  }) {
+    const smsText = `Dear ${payload.customerName}, your property booking ${payload.bookingNumber} for ${payload.projectName} Plot ${payload.plotNumber} has been confirmed. Thank you, Sri Thangam Housing.`;
+    const body = [`To: ${payload.customerMobile}`, smsText].join('\n');
+
+    const notificationMessage = await this.prisma.notificationMessage.create({
+      data: {
+        senderId: payload.senderId,
+        recipientName: payload.customerName,
+        recipientRole: 'CUSTOMER',
+        branchId: payload.branchId ?? null,
+        messageType: MessageType.BOOKING_FOLLOW_UP,
+        subject: `Property booking confirmed - ${payload.bookingNumber}`,
+        body,
+        relatedModule: 'Bookings',
+        relatedEntityId: payload.bookingId,
+      },
+    });
+
+    await this.sendCustomerSms(payload.customerMobile, smsText);
+
+    return notificationMessage;
+  }
+
+  async sendBillingCustomerMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    billingId: string;
+    billingNumber: string;
+    projectName: string;
+    plotNumber: string;
+    amountReceived: number;
+    totalBalance: number;
+  }) {
+    const smsText = `Dear ${payload.customerName}, payment of Rs.${payload.amountReceived} for booking ${payload.bookingNumber} (${payload.projectName} Plot ${payload.plotNumber}) has been recorded. Balance: Rs.${payload.totalBalance}. Thank you, Sri Thangam Housing.`;
+    const body = [`To: ${payload.customerMobile}`, smsText].join('\n');
+
+    const notificationMessage = await this.prisma.notificationMessage.create({
+      data: {
+        senderId: payload.senderId,
+        recipientName: payload.customerName,
+        recipientRole: 'CUSTOMER',
+        branchId: payload.branchId ?? null,
+        messageType: MessageType.BILLING_FOLLOW_UP,
+        subject: `Payment received - ${payload.billingNumber}`,
+        body,
+        relatedModule: 'Billing',
+        relatedEntityId: payload.billingId,
+      },
+    });
+
+    await this.sendCustomerSms(payload.customerMobile, smsText);
+
+    return notificationMessage;
+  }
+
+  async sendFinalSettlementReminderMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    billingId: string;
+    billingNumber: string;
+    projectName: string;
+    plotNumber: string;
+    balanceAmount: number;
+    dueDate: Date;
+  }) {
+    const dueDateText = payload.dueDate.toISOString().split('T')[0];
+    const smsText = `Dear ${payload.customerName}, reminder: final settlement balance Rs.${payload.balanceAmount} for booking ${payload.bookingNumber} (${payload.projectName} Plot ${payload.plotNumber}) is due by ${dueDateText}. Please pay before the due date. Sri Thangam Housing.`;
+    const body = [`To: ${payload.customerMobile}`, smsText].join('\n');
+
+    const notificationMessage = await this.prisma.notificationMessage.create({
+      data: {
+        senderId: payload.senderId,
+        recipientName: payload.customerName,
+        recipientRole: 'CUSTOMER',
+        branchId: payload.branchId ?? null,
+        messageType: MessageType.SETTLEMENT_REMINDER,
+        subject: `Final settlement reminder - ${payload.billingNumber}`,
+        body,
+        relatedModule: 'Billing',
+        relatedEntityId: payload.billingId,
+      },
+    });
+
+    await this.sendCustomerSms(payload.customerMobile, smsText);
+
+    return notificationMessage;
+  }
+
+  private async sendCustomerSms(phoneNumber: string, message: string) {
+    if (!this.smsService) return;
+
+    try {
+      const result = await this.smsService.sendSms(phoneNumber, message);
+      if (result.skipped) {
+        this.logger.warn(
+          `Customer SMS skipped: ${result.message ?? 'No reason provided'}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Customer SMS failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

@@ -35,7 +35,57 @@ export class DocumentsService {
     this.bucket =
       this.configService.get<string>('supabase.bucket') ?? 'sth-files';
 
-    this.supabase = createClient(supabaseUrl!, serviceRoleKey!);
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error(
+        'Supabase storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+      );
+    }
+
+    this.supabase = createClient(supabaseUrl, serviceRoleKey);
+  }
+
+  private async ensureStorageBucket(): Promise<void> {
+    if (!this.bucketReady) {
+      this.bucketReady = this.initializeStorageBucket().catch((error) => {
+        this.bucketReady = undefined;
+        throw error;
+      });
+    }
+    return this.bucketReady;
+  }
+
+  private async initializeStorageBucket(): Promise<void> {
+    const { data, error } = await this.supabase.storage.getBucket(this.bucket);
+    if (data && !error) return;
+
+    const isMissing =
+      error?.message?.toLowerCase().includes('not found') ||
+      String((error as { statusCode?: string | number } | null)?.statusCode) ===
+        '404';
+
+    if (!isMissing) {
+      throw new BadRequestException(
+        `Unable to access storage bucket "${this.bucket}": ${error?.message ?? 'Unknown error'}`,
+      );
+    }
+
+    const { error: createError } = await this.supabase.storage.createBucket(
+      this.bucket,
+      {
+        public: false,
+        fileSizeLimit: this.maxImageBytes,
+        allowedMimeTypes: this.allowedImageMimeTypes,
+      },
+    );
+
+    if (
+      createError &&
+      !createError.message.toLowerCase().includes('already exists')
+    ) {
+      throw new BadRequestException(
+        `Unable to create storage bucket "${this.bucket}": ${createError.message}. Verify SUPABASE_SERVICE_ROLE_KEY belongs to the configured project.`,
+      );
+    }
   }
 
   private async ensureStorageBucket(): Promise<void> {
@@ -89,15 +139,27 @@ export class DocumentsService {
     documentType: DocumentType,
     uploadedBy: string,
   ): Promise<Document> {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
     await this.ensureStorageBucket();
     const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
 
-    const { error } = await this.supabase.storage
-      .from(this.bucket)
-      .upload(storagePath, file.buffer, { contentType: file.mimetype });
+    let uploadError: Error | null = null;
+    try {
+      const { error } = await this.supabase.storage
+        .from(this.bucket)
+        .upload(storagePath, file.buffer, { contentType: file.mimetype });
+      uploadError = error;
+    } catch (error) {
+      uploadError = error instanceof Error ? error : new Error(String(error));
+    }
 
-    if (error) {
-      throw new BadRequestException(`File upload failed: ${error.message}`);
+    if (uploadError) {
+      throw new BadRequestException(
+        `File upload failed. Check Supabase URL, service-role key, bucket "${this.bucket}", and backend network access. ${uploadError.message}`,
+      );
     }
 
     const document = await this.prisma.document.create({

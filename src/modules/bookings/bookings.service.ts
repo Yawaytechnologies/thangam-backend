@@ -21,6 +21,7 @@ import { BookingFilterDto } from './dto/booking-filter.dto';
 import { generateBookingId } from '../../common/utils/id-generator.util';
 import { PdfService } from '../pdf/pdf.service';
 import { BookingPdfData } from '../pdf/templates/booking-form.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const BOOKING_TO_WORKFLOW: Record<BookingStatus, WorkflowStatus> = {
   [BookingStatus.BOOKING_INITIATED]: WorkflowStatus.BOOKING_INITIATED,
@@ -38,43 +39,53 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
-    @Optional() private readonly smsService?: SmsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
-  private validateCashDenominations(
-    dto: CreateBookingDto | UpdateBookingDto,
-  ): void {
-    const cashPayment = dto.payments?.find(
-      (payment) => payment.paymentMethod === PaymentMethod.CASH,
-    );
-    if (!cashPayment) return;
+  private async notifyBookingActivity(payload: {
+    title: string;
+    message: string;
+    triggeredById?: string;
+    branchId?: string | null;
+    bookingId?: string;
+    propertyId?: string;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
 
-    const denominations = dto.denominations ?? [];
-    if (denominations.length === 0) {
-      throw new BadRequestException(
-        'Cash payments require denomination details',
-      );
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: 'BOOKING_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        bookingId: payload.bookingId,
+        propertyId: payload.propertyId,
+        relatedModule: 'Bookings',
+        relatedEntityId: payload.relatedEntityId ?? payload.bookingId,
+      });
+    } catch {
+      // Notification failure should not block booking operations.
     }
+  }
 
-    const denominationTotal = denominations.reduce((total, row) => {
-      const calculatedAmount = row.denomination * row.count;
-      if (row.amount !== calculatedAmount) {
-        throw new BadRequestException(
-          `Invalid denomination amount for ₹${row.denomination}`,
-        );
-      }
-      return total + calculatedAmount;
-    }, 0);
+  private async sendCustomerBookingMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    projectName: string;
+    plotNumber: string;
+  }) {
+    if (!this.notificationsService) return;
 
-    if (cashPayment.cashAmount !== denominationTotal) {
-      throw new BadRequestException(
-        `Cash amount must equal denomination total (${denominationTotal})`,
-      );
-    }
-    if (cashPayment.totalAmount !== cashPayment.cashAmount) {
-      throw new BadRequestException(
-        'For cash payments, total amount must equal cash amount',
-      );
+    try {
+      await this.notificationsService.sendBookingCustomerMessage(payload);
+    } catch {
+      // Customer message failure should not block booking operations.
     }
   }
 
@@ -409,6 +420,31 @@ export class BookingsService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBookingActivity({
+        title: 'Booking Created',
+        message: `Booking ${created.bookingId} was created for ${created.applicantName} at ${created.projectName} ${created.plotNumber}.`,
+        triggeredById: user.id,
+        branchId: created.branchId,
+        bookingId: created.id,
+        propertyId: created.propertyId,
+        relatedEntityId: created.id,
+      });
+
+      await this.sendCustomerBookingMessage({
+        senderId: user.id,
+        customerName: created.applicantName,
+        customerMobile: created.cellNumber,
+        branchId: created.branchId,
+        bookingId: created.id,
+        bookingNumber: created.bookingId,
+        projectName: created.projectName,
+        plotNumber: created.plotNumber,
+      });
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -458,7 +494,7 @@ export class BookingsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedBooking = await this.prisma.$transaction(async (tx) => {
       // Update booking fields
       await tx.booking.update({
         where: { id },
@@ -547,6 +583,20 @@ export class BookingsService {
         },
       });
     });
+
+    if (updatedBooking) {
+      await this.notifyBookingActivity({
+        title: 'Booking Updated',
+        message: `Booking ${updatedBooking.bookingId} was updated for ${updatedBooking.applicantName}.`,
+        triggeredById: user.id,
+        branchId: updatedBooking.branchId,
+        bookingId: updatedBooking.id,
+        propertyId: updatedBooking.propertyId,
+        relatedEntityId: updatedBooking.id,
+      });
+    }
+
+    return updatedBooking;
   }
 
   async updateStatus(id: string, status: BookingStatus, userId: string) {
@@ -562,7 +612,7 @@ export class BookingsService {
     const previousStatus = booking.status;
     const newWorkflowStatus = BOOKING_TO_WORKFLOW[status];
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       // Update booking status
       const updated = await tx.booking.update({
         where: { id },
@@ -603,6 +653,21 @@ export class BookingsService {
         await this.smsService?.booking(tx, updated, status);
       return updated;
     });
+
+    await this.notifyBookingActivity({
+      title:
+        status === BookingStatus.CANCELLED
+          ? 'Booking Cancelled'
+          : 'Booking Status Updated',
+      message: `Booking ${booking.bookingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: booking.branchId,
+      bookingId: booking.id,
+      propertyId: booking.propertyId,
+      relatedEntityId: booking.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

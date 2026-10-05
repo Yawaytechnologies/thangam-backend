@@ -3,12 +3,13 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
-  Logger,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { DocumentType, Role, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { MemberFilterDto } from './dto/member-filter.dto';
@@ -23,71 +24,32 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
-    private readonly notificationsService: NotificationsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
-  private async findAncestorDirector(memberId: string) {
-    const visited = new Set<string>();
-    let currentId: string | null = memberId;
-
-    while (currentId && !visited.has(currentId)) {
-      visited.add(currentId);
-      const member = await this.prisma.member.findUnique({
-        where: { id: currentId },
-        select: {
-          id: true,
-          userId: true,
-          fullName: true,
-          role: true,
-          reportsToId: true,
-        },
-      });
-      if (!member) return null;
-      if (member.role === Role.DIRECTOR) return member;
-      currentId = member.reportsToId;
-    }
-
-    return null;
-  }
-
-  private async notifyDirectorOfNewMember(member: {
-    id: string;
-    memberId: string;
-    fullName: string;
-    role: Role;
-    branchId: string;
-    reportsToId: string | null;
+  private async notifyAdminActivity(payload: {
+    title: string;
+    message: string;
+    type?: 'MEMBER_ACTIVITY' | 'TEAM_ACTIVITY';
+    triggeredById?: string;
+    branchId?: string | null;
+    relatedEntityId?: string;
   }) {
-    const director = await this.findAncestorDirector(member.id);
+    if (!this.notificationsService) return;
 
-    const roleLabel = member.role
-      .toLowerCase()
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-    const reportingMember = member.reportsToId
-      ? await this.prisma.member.findUnique({
-          where: { id: member.reportsToId },
-          select: { fullName: true },
-        })
-      : null;
-    const isDirectorAccount = member.role === Role.DIRECTOR;
-
-    await this.notificationsService.dispatch({
-      title: isDirectorAccount
-        ? 'Director Account Created'
-        : `New ${roleLabel} Added`,
-      message: isDirectorAccount
-        ? `Welcome ${member.fullName}. Your Director account (${member.memberId}) has been created.`
-        : `${member.fullName} (${member.memberId}) was added${
-            reportingMember ? ` under ${reportingMember.fullName}` : ''
-          } in your reporting hierarchy.`,
-      type: isDirectorAccount ? 'SYSTEM_ACTIVITY' : 'TEAM_ACTIVITY',
-      branchId: member.branchId,
-      relatedModule: 'MEMBER',
-      relatedEntityId: member.id,
-      recipientUserIds: director ? [director.userId] : [],
-    });
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: payload.type ?? 'MEMBER_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        relatedModule: 'Members',
+        relatedEntityId: payload.relatedEntityId,
+      });
+    } catch {
+      // Notification failure should not block member operations.
+    }
   }
 
   private async getProfilePhotoUrlMap(
@@ -436,14 +398,13 @@ export class MembersService {
       return newMember;
     });
 
-    try {
-      await this.notifyDirectorOfNewMember(member);
-    } catch (error) {
-      this.logger.error(
-        `Member ${member.memberId} was created, but the Director notification failed`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
+    await this.notifyAdminActivity({
+      title: 'Member Created',
+      message: `New member "${member.fullName}" (${member.memberId}) was created with role ${member.role}.`,
+      triggeredById: user?.id,
+      branchId: member.branchId,
+      relatedEntityId: member.id,
+    });
 
     return member;
   }
@@ -543,12 +504,18 @@ export class MembersService {
 
   // ─── update ───────────────────────────────────────────────────────────────
 
-  async update(id: string, dto: UpdateMemberDto) {
+  async update(id: string, dto: UpdateMemberDto, user?: any) {
     const member = await this.prisma.member.findUnique({
       where: { id },
       include: { user: true },
     });
     if (!member) throw new NotFoundException('Member not found');
+
+    if (user?.role === Role.ADMIN && member.branchId !== user.admin?.branchId) {
+      throw new BadRequestException(
+        'You can only update members in your assigned branch',
+      );
+    }
 
     // Check uniqueness for phone/email/pan/aadhaar if changed
     if (dto.phone && dto.phone !== member.phone) {
@@ -669,6 +636,26 @@ export class MembersService {
       });
     });
 
+    const changes: string[] = [];
+    if (dto.role && dto.role !== member.role) {
+      changes.push(`role changed from ${member.role} to ${dto.role}`);
+    }
+    if (dto.status && dto.status !== member.status) {
+      changes.push(`status changed from ${member.status} to ${dto.status}`);
+    }
+    if (changes.length === 0) changes.push('profile details updated');
+
+    await this.notifyAdminActivity({
+      title:
+        dto.role && dto.role !== member.role
+          ? 'Member Role Changed'
+          : 'Member Updated',
+      message: `Member "${updated.fullName}" (${updated.memberId}) ${changes.join(', ')}.`,
+      triggeredById: user?.id,
+      branchId: updated.branchId,
+      relatedEntityId: updated.id,
+    });
+
     return updated;
   }
 
@@ -678,7 +665,7 @@ export class MembersService {
     const member = await this.prisma.member.findUnique({ where: { id } });
     if (!member) throw new NotFoundException('Member not found');
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: member.userId },
         data: { status },
@@ -694,6 +681,18 @@ export class MembersService {
         },
       });
     });
+
+    await this.notifyAdminActivity({
+      title:
+        status === UserStatus.INACTIVE
+          ? 'Member Deactivated'
+          : 'Member Status Updated',
+      message: `Member "${updated.fullName}" (${updated.memberId}) status changed from ${member.status} to ${status}.`,
+      branchId: updated.branchId,
+      relatedEntityId: updated.id,
+    });
+
+    return updated;
   }
 
   // ─── getTeamForMobile ─────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import { generateBillingId } from '../../common/utils/id-generator.util';
 import { numberToWords } from '../../common/utils/amount-words.util';
 import { PdfService } from '../pdf/pdf.service';
 import { EstimatePdfData } from '../pdf/templates/estimate-copy.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BillingService {
@@ -214,6 +215,37 @@ export class BillingService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBillingActivity({
+        title: 'Billing Created',
+        message: `Billing ${created.billingId} was created for booking ${created.booking?.bookingId ?? created.bookingId}.`,
+        triggeredById: user.id,
+        branchId: created.booking?.branchId,
+        bookingId: created.bookingId,
+        billingId: created.id,
+        relatedEntityId: created.id,
+      });
+
+      if (created.booking) {
+        await this.sendCustomerBillingMessage({
+          senderId: user.id,
+          customerName: created.buyerName,
+          customerMobile: created.buyerPhone,
+          branchId: created.booking.branchId,
+          bookingId: created.bookingId,
+          bookingNumber: created.booking.bookingId,
+          billingId: created.id,
+          billingNumber: created.billingId,
+          projectName: created.booking.projectName,
+          plotNumber: created.booking.plotNumber,
+          amountReceived: created.totalReceived,
+          totalBalance: created.totalBalance,
+        });
+      }
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -332,10 +364,30 @@ export class BillingService {
       }
       return updated;
     });
+
+    await this.notifyBillingActivity({
+      title:
+        dto.status && dto.status !== billing.status
+          ? 'Billing Status Updated'
+          : 'Billing Updated',
+      message: `Billing ${updated.billingId} was updated for booking ${updated.booking?.bookingId ?? updated.bookingId}.`,
+      triggeredById: user.id,
+      branchId: billing.booking.branchId,
+      bookingId: updated.bookingId,
+      billingId: updated.id,
+      relatedEntityId: updated.id,
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, status: BillingStatus, userId: string) {
-    const billing = await this.prisma.billing.findUnique({ where: { id } });
+    const billing = await this.prisma.billing.findUnique({
+      where: { id },
+      include: {
+        booking: { select: { id: true, bookingId: true, branchId: true } },
+      },
+    });
     if (!billing) {
       throw new NotFoundException(`Billing record with id ${id} not found`);
     }
@@ -346,7 +398,7 @@ export class BillingService {
 
     const previousStatus = billing.status;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.billing.update({
         where: { id },
         data: { status },
@@ -365,6 +417,18 @@ export class BillingService {
 
       return updated;
     });
+
+    await this.notifyBillingActivity({
+      title: 'Billing Status Updated',
+      message: `Billing ${billing.billingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: billing.booking?.branchId,
+      bookingId: billing.bookingId,
+      billingId: billing.id,
+      relatedEntityId: billing.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

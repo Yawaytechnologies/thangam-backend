@@ -22,6 +22,7 @@ import { TopPerformersModule } from './modules/top-performers/top-performers.mod
 import { DocumentsModule } from './modules/documents/documents.module';
 import { PdfModule } from './modules/pdf/pdf.module';
 import { DirectorModule } from './modules/director/director.module';
+import { SettlementRemindersModule } from './modules/settlement-reminders/settlement-reminders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -51,6 +52,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     DocumentsModule,
     PdfModule,
     DirectorModule,
+    SettlementRemindersModule,
     HealthModule,
     ReferralsModule,
   ],

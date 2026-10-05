@@ -48,8 +48,12 @@ See `.env.example` for all required variables:
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
 | `SUPABASE_STORAGE_BUCKET` | Storage bucket name (default: `sth-files`) |
+| `SMS_PROVIDER` | Set to `fast2sms` to send real customer SMS messages |
+| `FAST2SMS_API_KEY` | Fast2SMS Dev API authorization key |
 | `CORS_ORIGIN` | Allowed frontend origin |
 | `SWAGGER_ENABLED` | Set to `true` to enable Swagger UI in production (always on in development) |
+
+Customer SMS is sent when bookings and billing/payment records are created. Final settlement reminders are checked automatically once when the backend starts and then once per day: billing records in `FINAL_SETTLEMENT` with a pending `totalBalance` get one reminder SMS during the last 5 days before the one-month due date.
 
 ## API Docs
 

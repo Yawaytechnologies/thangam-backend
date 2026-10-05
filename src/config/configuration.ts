@@ -22,5 +22,11 @@ export default () => ({
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     bucket: process.env.SUPABASE_STORAGE_BUCKET || 'sth-files',
   },
+  sms: {
+    provider: process.env.SMS_PROVIDER || '',
+    fast2sms: {
+      apiKey: process.env.FAST2SMS_API_KEY || '',
+    },
+  },
   cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:3000' },
 });
