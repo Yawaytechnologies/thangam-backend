@@ -15,13 +15,66 @@ import { generateBillingId } from '../../common/utils/id-generator.util';
 import { numberToWords } from '../../common/utils/amount-words.util';
 import { PdfService } from '../pdf/pdf.service';
 import { EstimatePdfData } from '../pdf/templates/estimate-copy.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  private async notifyBillingActivity(payload: {
+    title: string;
+    message: string;
+    triggeredById?: string;
+    branchId?: string | null;
+    bookingId?: string;
+    billingId?: string;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: 'BILLING_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        bookingId: payload.bookingId,
+        billingId: payload.billingId,
+        relatedModule: 'Billing',
+        relatedEntityId: payload.relatedEntityId ?? payload.billingId,
+      });
+    } catch {
+      // Notification failure should not block billing operations.
+    }
+  }
+
+  private async sendCustomerBillingMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    billingId: string;
+    billingNumber: string;
+    projectName: string;
+    plotNumber: string;
+    amountReceived: number;
+    totalBalance: number;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.sendBillingCustomerMessage(payload);
+    } catch {
+      // Customer SMS failure should not block billing operations.
+    }
+  }
 
   async findAll(user: any, filters: BillingFilterDto) {
     const page = filters.page ?? 1;
@@ -112,7 +165,7 @@ export class BillingService {
   }
 
   async create(dto: CreateBillingDto, user: any) {
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // 1. Find booking
       const booking = await tx.booking.findUnique({
         where: { id: dto.bookingId },
@@ -205,6 +258,37 @@ export class BillingService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBillingActivity({
+        title: 'Billing Created',
+        message: `Billing ${created.billingId} was created for booking ${created.booking?.bookingId ?? created.bookingId}.`,
+        triggeredById: user.id,
+        branchId: created.booking?.branchId,
+        bookingId: created.bookingId,
+        billingId: created.id,
+        relatedEntityId: created.id,
+      });
+
+      if (created.booking) {
+        await this.sendCustomerBillingMessage({
+          senderId: user.id,
+          customerName: created.buyerName,
+          customerMobile: created.buyerPhone,
+          branchId: created.booking.branchId,
+          bookingId: created.bookingId,
+          bookingNumber: created.booking.bookingId,
+          billingId: created.id,
+          billingNumber: created.billingId,
+          projectName: created.booking.projectName,
+          plotNumber: created.booking.plotNumber,
+          amountReceived: created.totalReceived,
+          totalBalance: created.totalBalance,
+        });
+      }
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -267,7 +351,7 @@ export class BillingService {
       amountInWords = numberToWords(dto.amountInNumbers);
     }
 
-    return this.prisma.billing.update({
+    const updated = await this.prisma.billing.update({
       where: { id },
       data: {
         ...(dto.paymentMethod !== undefined && {
@@ -314,10 +398,30 @@ export class BillingService {
         },
       },
     });
+
+    await this.notifyBillingActivity({
+      title:
+        dto.status && dto.status !== billing.status
+          ? 'Billing Status Updated'
+          : 'Billing Updated',
+      message: `Billing ${updated.billingId} was updated for booking ${updated.booking?.bookingId ?? updated.bookingId}.`,
+      triggeredById: user.id,
+      branchId: billing.booking.branchId,
+      bookingId: updated.bookingId,
+      billingId: updated.id,
+      relatedEntityId: updated.id,
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, status: BillingStatus, userId: string) {
-    const billing = await this.prisma.billing.findUnique({ where: { id } });
+    const billing = await this.prisma.billing.findUnique({
+      where: { id },
+      include: {
+        booking: { select: { id: true, bookingId: true, branchId: true } },
+      },
+    });
     if (!billing) {
       throw new NotFoundException(`Billing record with id ${id} not found`);
     }
@@ -328,7 +432,7 @@ export class BillingService {
 
     const previousStatus = billing.status;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.billing.update({
         where: { id },
         data: { status },
@@ -347,6 +451,18 @@ export class BillingService {
 
       return updated;
     });
+
+    await this.notifyBillingActivity({
+      title: 'Billing Status Updated',
+      message: `Billing ${billing.billingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: billing.booking?.branchId,
+      bookingId: billing.bookingId,
+      billingId: billing.id,
+      relatedEntityId: billing.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

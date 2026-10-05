@@ -3,11 +3,13 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { DocumentType, Role, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { MemberFilterDto } from './dto/member-filter.dto';
@@ -18,7 +20,33 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  private async notifyAdminActivity(payload: {
+    title: string;
+    message: string;
+    type?: 'MEMBER_ACTIVITY' | 'TEAM_ACTIVITY';
+    triggeredById?: string;
+    branchId?: string | null;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: payload.type ?? 'MEMBER_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        relatedModule: 'Members',
+        relatedEntityId: payload.relatedEntityId,
+      });
+    } catch {
+      // Notification failure should not block member operations.
+    }
+  }
 
   private async getProfilePhotoUrlMap(
     memberIds: string[],
@@ -364,6 +392,14 @@ export class MembersService {
       return newMember;
     });
 
+    await this.notifyAdminActivity({
+      title: 'Member Created',
+      message: `New member "${member.fullName}" (${member.memberId}) was created with role ${member.role}.`,
+      triggeredById: user?.id,
+      branchId: member.branchId,
+      relatedEntityId: member.id,
+    });
+
     return member;
   }
 
@@ -461,12 +497,18 @@ export class MembersService {
 
   // ─── update ───────────────────────────────────────────────────────────────
 
-  async update(id: string, dto: UpdateMemberDto) {
+  async update(id: string, dto: UpdateMemberDto, user?: any) {
     const member = await this.prisma.member.findUnique({
       where: { id },
       include: { user: true },
     });
     if (!member) throw new NotFoundException('Member not found');
+
+    if (user?.role === Role.ADMIN && member.branchId !== user.admin?.branchId) {
+      throw new BadRequestException(
+        'You can only update members in your assigned branch',
+      );
+    }
 
     // Check uniqueness for phone/email/pan/aadhaar if changed
     if (dto.phone && dto.phone !== member.phone) {
@@ -587,6 +629,26 @@ export class MembersService {
       });
     });
 
+    const changes: string[] = [];
+    if (dto.role && dto.role !== member.role) {
+      changes.push(`role changed from ${member.role} to ${dto.role}`);
+    }
+    if (dto.status && dto.status !== member.status) {
+      changes.push(`status changed from ${member.status} to ${dto.status}`);
+    }
+    if (changes.length === 0) changes.push('profile details updated');
+
+    await this.notifyAdminActivity({
+      title:
+        dto.role && dto.role !== member.role
+          ? 'Member Role Changed'
+          : 'Member Updated',
+      message: `Member "${updated.fullName}" (${updated.memberId}) ${changes.join(', ')}.`,
+      triggeredById: user?.id,
+      branchId: updated.branchId,
+      relatedEntityId: updated.id,
+    });
+
     return updated;
   }
 
@@ -596,7 +658,7 @@ export class MembersService {
     const member = await this.prisma.member.findUnique({ where: { id } });
     if (!member) throw new NotFoundException('Member not found');
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: member.userId },
         data: { status },
@@ -612,6 +674,18 @@ export class MembersService {
         },
       });
     });
+
+    await this.notifyAdminActivity({
+      title:
+        status === UserStatus.INACTIVE
+          ? 'Member Deactivated'
+          : 'Member Status Updated',
+      message: `Member "${updated.fullName}" (${updated.memberId}) status changed from ${member.status} to ${status}.`,
+      branchId: updated.branchId,
+      relatedEntityId: updated.id,
+    });
+
+    return updated;
   }
 
   // ─── getTeamForMobile ─────────────────────────────────────────────────────

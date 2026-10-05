@@ -19,6 +19,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { TopPerformersModule } from './modules/top-performers/top-performers.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { PdfModule } from './modules/pdf/pdf.module';
+import { SettlementRemindersModule } from './modules/settlement-reminders/settlement-reminders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -46,6 +47,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     TopPerformersModule,
     DocumentsModule,
     PdfModule,
+    SettlementRemindersModule,
     HealthModule,
   ],
   providers: [

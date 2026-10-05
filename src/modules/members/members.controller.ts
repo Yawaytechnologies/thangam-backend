@@ -88,10 +88,14 @@ export class MembersController {
   }
 
   @Put(':id')
-  @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Update member (SUPER_ADMIN only)' })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMemberDto) {
-    return this.membersService.update(id, dto);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Update member' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMemberDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.membersService.update(id, dto, user);
   }
 
   @Patch(':id/status')

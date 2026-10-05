@@ -155,7 +155,7 @@ export class DashboardService {
     const members = await this.prisma.member.findMany({
       where: { branchId },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 1000,
       select: {
         id: true,
         memberId: true,
@@ -166,7 +166,49 @@ export class DashboardService {
       },
     });
 
-    return members;
+    const completedBookings = await this.prisma.booking.findMany({
+      where: {
+        branchId,
+        status: BookingStatus.COMPLETED,
+      },
+      select: { edDdSmBmName: true, directorName: true },
+    });
+
+    const normalizeReferralName = (value: string | null) =>
+      value
+        ?.replace(/\s*\([^)]*\)\s*$/, '')
+        .trim()
+        .toLowerCase() ?? '';
+    const countsByName = new Map<string, number>();
+    for (const booking of completedBookings) {
+      const names = new Set(
+        [booking.edDdSmBmName, booking.directorName]
+          .map(normalizeReferralName)
+          .filter(Boolean),
+      );
+      for (const name of names) {
+        if (name) countsByName.set(name, (countsByName.get(name) ?? 0) + 1);
+      }
+    }
+
+    const directTeamCounts = await this.prisma.member.groupBy({
+      by: ['reportsToId'],
+      where: {
+        branchId,
+        reportsToId: { not: null },
+      },
+      _count: { _all: true },
+    });
+    const teamCountsById = new Map(
+      directTeamCounts.map((entry) => [entry.reportsToId, entry._count._all]),
+    );
+
+    return members.map((member) => ({
+      ...member,
+      directTeamCount: teamCountsById.get(member.id) ?? 0,
+      propertyReferralCount:
+        countsByName.get(normalizeReferralName(member.fullName)) ?? 0,
+    }));
   }
 
   async getAdminBookingActivity(branchId: string) {
@@ -180,6 +222,8 @@ export class DashboardService {
         applicantName: true,
         projectName: true,
         plotNumber: true,
+        edDdSmBmName: true,
+        referenceCode: true,
         status: true,
         bookingDate: true,
       },

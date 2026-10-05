@@ -4,6 +4,7 @@ import { BookingStatus, Role } from '@prisma/client';
 import { BookingsService } from './bookings.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 jest.mock('../../common/utils/id-generator.util', () => ({
   generateBookingId: jest.fn().mockReturnValue('STH-BK-0001'),
@@ -250,6 +251,68 @@ describe('BookingsService', () => {
 
       const createData = txCreate.mock.calls[0][0].data;
       expect(createData).not.toHaveProperty('signatureUrl');
+    });
+
+    it('queues a booking confirmation message for the customer mobile number', async () => {
+      const mockNotificationsService = {
+        createNotification: jest.fn(),
+        sendBookingCustomerMessage: jest.fn(),
+      };
+      const serviceWithNotifications = new BookingsService(
+        mockPrisma as any,
+        mockPdfService as any,
+        mockNotificationsService as unknown as NotificationsService,
+      );
+      const createdBooking = {
+        id: 'b1',
+        bookingId: 'STH-BK-0001',
+        propertyId: 'prop-1',
+        branchId: 'branch-1',
+        applicantName: 'Rajesh Kumar',
+        cellNumber: '9876543210',
+        projectName: 'Green Valley',
+        plotNumber: 'PLOT-101',
+        status: BookingStatus.BOOKING_INITIATED,
+        payments: [],
+        denominations: [],
+      };
+
+      mockTransaction.mockImplementation(async (fn: any) =>
+        fn({
+          property: {
+            findUnique: jest
+              .fn()
+              .mockResolvedValue({ id: 'prop-1', workflowStatus: 'AVAILABLE' }),
+            update: jest.fn(),
+          },
+          booking: {
+            count: jest.fn().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue(createdBooking),
+            findUnique: jest.fn().mockResolvedValue(createdBooking),
+          },
+          bookingPayment: { createMany: jest.fn() },
+          bookingDenomination: { createMany: jest.fn() },
+          workflowHistory: { create: jest.fn() },
+        }),
+      );
+
+      await serviceWithNotifications.create(
+        { ...dto, branchId: 'branch-1' },
+        superAdminUser,
+      );
+
+      expect(
+        mockNotificationsService.sendBookingCustomerMessage,
+      ).toHaveBeenCalledWith({
+        senderId: 'super-1',
+        customerName: 'Rajesh Kumar',
+        customerMobile: '9876543210',
+        branchId: 'branch-1',
+        bookingId: 'b1',
+        bookingNumber: 'STH-BK-0001',
+        projectName: 'Green Valley',
+        plotNumber: 'PLOT-101',
+      });
     });
   });
 

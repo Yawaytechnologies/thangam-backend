@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Billing, Document, DocumentType, WorkflowStatus } from '@prisma/client';
+import {
+  Billing,
+  Document,
+  DocumentType,
+  WorkflowStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
 import { generatePropertyId } from '../../common/utils/id-generator.util';

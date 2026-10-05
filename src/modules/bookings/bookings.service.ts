@@ -15,6 +15,7 @@ import { BookingFilterDto } from './dto/booking-filter.dto';
 import { generateBookingId } from '../../common/utils/id-generator.util';
 import { PdfService } from '../pdf/pdf.service';
 import { BookingPdfData } from '../pdf/templates/booking-form.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const BOOKING_TO_WORKFLOW: Record<BookingStatus, WorkflowStatus> = {
   [BookingStatus.BOOKING_INITIATED]: WorkflowStatus.BOOKING_INITIATED,
@@ -32,7 +33,55 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  private async notifyBookingActivity(payload: {
+    title: string;
+    message: string;
+    triggeredById?: string;
+    branchId?: string | null;
+    bookingId?: string;
+    propertyId?: string;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: 'BOOKING_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        bookingId: payload.bookingId,
+        propertyId: payload.propertyId,
+        relatedModule: 'Bookings',
+        relatedEntityId: payload.relatedEntityId ?? payload.bookingId,
+      });
+    } catch {
+      // Notification failure should not block booking operations.
+    }
+  }
+
+  private async sendCustomerBookingMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    projectName: string;
+    plotNumber: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.sendBookingCustomerMessage(payload);
+    } catch {
+      // Customer message failure should not block booking operations.
+    }
+  }
 
   async findAll(user: any, filters: BookingFilterDto) {
     const page = filters.page ?? 1;
@@ -138,7 +187,7 @@ export class BookingsService {
       branchId = dto.branchId;
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // 1. Verify property exists and is available
       const property = await tx.property.findUnique({
         where: { id: dto.propertyId },
@@ -261,6 +310,31 @@ export class BookingsService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBookingActivity({
+        title: 'Booking Created',
+        message: `Booking ${created.bookingId} was created for ${created.applicantName} at ${created.projectName} ${created.plotNumber}.`,
+        triggeredById: user.id,
+        branchId: created.branchId,
+        bookingId: created.id,
+        propertyId: created.propertyId,
+        relatedEntityId: created.id,
+      });
+
+      await this.sendCustomerBookingMessage({
+        senderId: user.id,
+        customerName: created.applicantName,
+        customerMobile: created.cellNumber,
+        branchId: created.branchId,
+        bookingId: created.id,
+        bookingNumber: created.bookingId,
+        projectName: created.projectName,
+        plotNumber: created.plotNumber,
+      });
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -309,7 +383,7 @@ export class BookingsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedBooking = await this.prisma.$transaction(async (tx) => {
       // Update booking fields
       await tx.booking.update({
         where: { id },
@@ -398,6 +472,20 @@ export class BookingsService {
         },
       });
     });
+
+    if (updatedBooking) {
+      await this.notifyBookingActivity({
+        title: 'Booking Updated',
+        message: `Booking ${updatedBooking.bookingId} was updated for ${updatedBooking.applicantName}.`,
+        triggeredById: user.id,
+        branchId: updatedBooking.branchId,
+        bookingId: updatedBooking.id,
+        propertyId: updatedBooking.propertyId,
+        relatedEntityId: updatedBooking.id,
+      });
+    }
+
+    return updatedBooking;
   }
 
   async updateStatus(id: string, status: BookingStatus, userId: string) {
@@ -413,7 +501,7 @@ export class BookingsService {
     const previousStatus = booking.status;
     const newWorkflowStatus = BOOKING_TO_WORKFLOW[status];
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       // Update booking status
       const updated = await tx.booking.update({
         where: { id },
@@ -452,6 +540,21 @@ export class BookingsService {
 
       return updated;
     });
+
+    await this.notifyBookingActivity({
+      title:
+        status === BookingStatus.CANCELLED
+          ? 'Booking Cancelled'
+          : 'Booking Status Updated',
+      message: `Booking ${booking.bookingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: booking.branchId,
+      bookingId: booking.id,
+      propertyId: booking.propertyId,
+      relatedEntityId: booking.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

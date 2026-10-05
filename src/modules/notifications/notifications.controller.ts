@@ -47,7 +47,7 @@ export class NotificationsController {
   })
   @ApiResponse({ status: 200, description: 'Latest notifications' })
   findLatest(@CurrentUser() user: any) {
-    return this.notificationsService.findLatest(user.id);
+    return this.notificationsService.findLatest(user);
   }
 
   // GET /notifications/unread-count
@@ -61,7 +61,7 @@ export class NotificationsController {
     schema: { example: { count: 5 } },
   })
   async getUnreadCount(@CurrentUser() user: any): Promise<{ count: number }> {
-    const count = await this.notificationsService.getUnreadCount(user.id);
+    const count = await this.notificationsService.getUnreadCount(user);
     return { count };
   }
 
