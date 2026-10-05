@@ -20,7 +20,7 @@ export class NotificationsGateway implements OnGatewayConnection {
     private readonly configService: ConfigService,
   ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     try {
       const token =
         client.handshake.auth?.token ||
@@ -36,7 +36,7 @@ export class NotificationsGateway implements OnGatewayConnection {
       });
 
       client.data.userId = payload.sub;
-      client.join(`user:${payload.sub}`);
+      await client.join(`user:${payload.sub}`);
     } catch {
       client.disconnect();
     }

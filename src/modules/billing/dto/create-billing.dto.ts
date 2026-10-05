@@ -8,7 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentMethod } from '@prisma/client';
+import { BillingStatus, PaymentMethod } from '@prisma/client';
 
 export class CreateBillingDto {
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
@@ -120,4 +120,9 @@ export class CreateBillingDto {
   @IsString()
   @IsOptional()
   gpayReference?: string;
+
+  @ApiPropertyOptional({ enum: BillingStatus, default: BillingStatus.PENDING })
+  @IsEnum(BillingStatus)
+  @IsOptional()
+  status?: BillingStatus;
 }

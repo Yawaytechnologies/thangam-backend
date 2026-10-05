@@ -4,11 +4,11 @@ import {
   IsOptional,
   IsUUID,
   Matches,
+  Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-const PHONE_NUMBER_REGEX =
-  /^(?:(?:\+91[\s-]?|91[\s-]?|0)?[6-9]\d{9}|(?:\+91[\s-]?|91[\s-]?)?(?:0?\d{2,5}[\s-]?\d{6,8}|\(0?\d{2,5}\)[\s-]?\d{6,8}))$/;
+const PHONE_NUMBER_REGEX = /^[789]\d{9}$/;
 
 export class CreateBranchDto {
   @ApiProperty({ example: 'Chennai Central Branch' })
@@ -16,47 +16,47 @@ export class CreateBranchDto {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ example: 'Main' })
+  @ApiProperty({ example: 'Main Branch' })
   @IsString()
-  @IsOptional()
-  branchType?: string;
+  @IsNotEmpty()
+  branchType!: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '9876543210',
-    description:
-      'Indian mobile or telephone number. Examples: 9876543210, +91 9876543210, 044-23456789, 0413 2222222',
+    description: '10-digit Indian mobile number starting with 7, 8, or 9',
   })
   @IsString()
   @Matches(PHONE_NUMBER_REGEX, {
-    message: 'phone must be a valid Indian mobile number or telephone number',
+    message: 'phone must contain exactly 10 digits and start with 7, 8, or 9',
   })
-  @IsOptional()
-  phone?: string;
+  @IsNotEmpty()
+  phone!: string;
 
-  @ApiPropertyOptional({ example: '12, Anna Salai' })
+  @ApiProperty({ example: '12, Anna Salai' })
   @IsString()
-  @IsOptional()
-  address?: string;
+  @IsNotEmpty()
+  address!: string;
 
-  @ApiPropertyOptional({ example: 'Chennai' })
+  @ApiProperty({ example: 'Chennai' })
   @IsString()
-  @IsOptional()
-  city?: string;
+  @IsNotEmpty()
+  city!: string;
 
-  @ApiPropertyOptional({ example: 'Chennai' })
+  @ApiProperty({ example: 'Chennai' })
   @IsString()
-  @IsOptional()
-  district?: string;
+  @IsNotEmpty()
+  district!: string;
 
-  @ApiPropertyOptional({ example: 'Tamil Nadu' })
+  @ApiProperty({ example: 'Tamil Nadu' })
   @IsString()
-  @IsOptional()
-  state?: string;
+  @IsNotEmpty()
+  state!: string;
 
-  @ApiPropertyOptional({ example: '600001' })
+  @ApiProperty({ example: '600001' })
   @IsString()
-  @IsOptional()
-  pincode?: string;
+  @Matches(/^\d{6}$/, { message: 'pincode must contain exactly 6 digits' })
+  @Length(6, 6)
+  pincode!: string;
 
   @ApiPropertyOptional({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',

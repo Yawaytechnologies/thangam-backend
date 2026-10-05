@@ -7,14 +7,21 @@ import {
   ServiceUnavailableException,
   Optional,
 } from '@nestjs/common';
-import { BookingStatus, WorkflowStatus, Role } from '@prisma/client';
+import {
+  BookingStatus,
+  WorkflowStatus,
+  Role,
+  PaymentMethod,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SmsService } from '../sms/sms.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { BookingFilterDto } from './dto/booking-filter.dto';
 import { generateBookingId } from '../../common/utils/id-generator.util';
 import { PdfService } from '../pdf/pdf.service';
 import { BookingPdfData } from '../pdf/templates/booking-form.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const BOOKING_TO_WORKFLOW: Record<BookingStatus, WorkflowStatus> = {
   [BookingStatus.BOOKING_INITIATED]: WorkflowStatus.BOOKING_INITIATED,
@@ -32,7 +39,55 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  private async notifyBookingActivity(payload: {
+    title: string;
+    message: string;
+    triggeredById?: string;
+    branchId?: string | null;
+    bookingId?: string;
+    propertyId?: string;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.createNotification({
+        title: payload.title,
+        message: payload.message,
+        type: 'BOOKING_ACTIVITY',
+        triggeredById: payload.triggeredById,
+        branchId: payload.branchId ?? undefined,
+        bookingId: payload.bookingId,
+        propertyId: payload.propertyId,
+        relatedModule: 'Bookings',
+        relatedEntityId: payload.relatedEntityId ?? payload.bookingId,
+      });
+    } catch {
+      // Notification failure should not block booking operations.
+    }
+  }
+
+  private async sendCustomerBookingMessage(payload: {
+    senderId: string;
+    customerName: string;
+    customerMobile: string;
+    branchId?: string | null;
+    bookingId: string;
+    bookingNumber: string;
+    projectName: string;
+    plotNumber: string;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.sendBookingCustomerMessage(payload);
+    } catch {
+      // Customer message failure should not block booking operations.
+    }
+  }
 
   async findAll(user: any, filters: BookingFilterDto) {
     const page = filters.page ?? 1;
@@ -119,6 +174,7 @@ export class BookingsService {
   }
 
   async create(dto: CreateBookingDto, user: any) {
+    this.validateCashDenominations(dto);
     // Determine branchId
     let branchId: string;
     if (user.role === Role.ADMIN) {
@@ -139,6 +195,42 @@ export class BookingsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      let referral: Awaited<ReturnType<typeof tx.customerReferral.findFirst>> =
+        null;
+      if (dto.referralId) {
+        if (
+          user.role !== Role.ADMIN ||
+          !user.admin?.id ||
+          dto.referralVersion === undefined ||
+          !dto.referralNotes?.trim()
+        ) {
+          throw new BadRequestException(
+            'A current approved referral, version, and availability-check notes are required',
+          );
+        }
+        referral = await tx.customerReferral.findFirst({
+          where: {
+            id: dto.referralId,
+            branchId,
+            currentReviewerId: user.admin.id,
+            status: 'WITH_ADMIN',
+            bookingId: null,
+          },
+        });
+        if (!referral)
+          throw new NotFoundException(
+            'This referral is not assigned to your Admin account',
+          );
+        if (referral.version !== dto.referralVersion)
+          throw new ConflictException(
+            'This referral changed. Refresh before creating a booking',
+          );
+        if (referral.propertyId !== dto.propertyId)
+          throw new BadRequestException(
+            'Select the property approved on this referral',
+          );
+      }
+
       // 1. Verify property exists and is available
       const property = await tx.property.findUnique({
         where: { id: dto.propertyId },
@@ -153,33 +245,46 @@ export class BookingsService {
           `Property is not available for booking (current status: ${property.workflowStatus})`,
         );
       }
+      if (property.branchId && property.branchId !== branchId) {
+        throw new BadRequestException(
+          'Selected booking branch does not match the property branch',
+        );
+      }
+      if (referral && property.branchId !== branchId) {
+        throw new BadRequestException(
+          'The referral property must belong to your branch',
+        );
+      }
 
       // 2. Auto-generate bookingId
       const count = await tx.booking.count();
       const bookingId = generateBookingId(count + 1);
 
       // 3. Create Booking
+      const bookingData = {
+        bookingId,
+        propertyId: dto.propertyId,
+        branchId,
+        applicantName: referral?.customerName ?? dto.applicantName,
+        relation: dto.relation,
+        applicantAddress: dto.applicantAddress,
+        pinCode: dto.pinCode,
+        cellNumber: referral?.customerPhone ?? dto.cellNumber,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        weddingDay: dto.weddingDay ? new Date(dto.weddingDay) : undefined,
+        projectName: referral ? property.projectName : dto.projectName,
+        plotNumber: referral ? property.plotNumber : dto.plotNumber,
+        squareFeet: referral
+          ? (property.squareFeet ?? undefined)
+          : dto.squareFeet,
+        bookingDate: new Date(dto.bookingDate),
+        edDdSmBmName: dto.edDdSmBmName,
+        referenceCode: dto.referenceCode,
+        directorName: dto.directorName,
+        status: BookingStatus.BOOKING_INITIATED,
+      };
       const booking = await tx.booking.create({
-        data: {
-          bookingId,
-          propertyId: dto.propertyId,
-          branchId,
-          applicantName: dto.applicantName,
-          relation: dto.relation,
-          applicantAddress: dto.applicantAddress,
-          pinCode: dto.pinCode,
-          cellNumber: dto.cellNumber,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          weddingDay: dto.weddingDay ? new Date(dto.weddingDay) : undefined,
-          projectName: dto.projectName,
-          plotNumber: dto.plotNumber,
-          squareFeet: dto.squareFeet,
-          bookingDate: new Date(dto.bookingDate),
-          edDdSmBmName: dto.edDdSmBmName,
-          referenceCode: dto.referenceCode,
-          directorName: dto.directorName,
-          status: BookingStatus.BOOKING_INITIATED,
-        },
+        data: bookingData,
       });
 
       // 4. Create BookingPayments
@@ -212,10 +317,26 @@ export class BookingsService {
       }
 
       // 6. Update property workflowStatus to BOOKING_INITIATED
-      await tx.property.update({
-        where: { id: dto.propertyId },
-        data: { workflowStatus: WorkflowStatus.BOOKING_INITIATED },
-      });
+      if (referral) {
+        const claimedProperty = await tx.property.updateMany({
+          where: {
+            id: dto.propertyId,
+            branchId,
+            workflowStatus: WorkflowStatus.AVAILABLE,
+          },
+          data: { workflowStatus: WorkflowStatus.BOOKING_INITIATED },
+        });
+        if (claimedProperty.count !== 1) {
+          throw new ConflictException(
+            'Property is no longer available for booking',
+          );
+        }
+      } else {
+        await tx.property.update({
+          where: { id: dto.propertyId },
+          data: { workflowStatus: WorkflowStatus.BOOKING_INITIATED },
+        });
+      }
 
       // 7. Create WorkflowHistory for property
       await tx.workflowHistory.create({
@@ -224,7 +345,7 @@ export class BookingsService {
           entityId: dto.propertyId,
           fromStatus: property.workflowStatus,
           toStatus: WorkflowStatus.BOOKING_INITIATED,
-          remarks: `Booking initiated by ${booking.applicantName}`,
+          remarks: `Booking initiated by ${bookingData.applicantName}`,
           performedBy: user.id,
         },
       });
@@ -240,6 +361,44 @@ export class BookingsService {
           performedBy: user.id,
         },
       });
+
+      await this.smsService?.booking(
+        tx,
+        booking,
+        BookingStatus.BOOKING_INITIATED,
+      );
+
+      if (referral) {
+        const updatedReferral = await tx.customerReferral.updateMany({
+          where: {
+            id: referral.id,
+            branchId,
+            currentReviewerId: user.admin.id,
+            status: 'WITH_ADMIN',
+            version: dto.referralVersion,
+            bookingId: null,
+          },
+          data: {
+            bookingId: booking.id,
+            status: 'BOOKED',
+            version: { increment: 1 },
+          },
+        });
+        if (updatedReferral.count !== 1) {
+          throw new ConflictException(
+            'This referral changed. Refresh before creating a booking',
+          );
+        }
+        await tx.customerReferralActivity.create({
+          data: {
+            referralId: referral.id,
+            actorId: user.admin.id,
+            actorName: user.admin.fullName,
+            action: 'BOOKING_CREATED',
+            notes: dto.referralNotes!.trim(),
+          },
+        });
+      }
 
       // Return booking with payments + denominations
       return tx.booking.findUnique({
@@ -261,6 +420,31 @@ export class BookingsService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBookingActivity({
+        title: 'Booking Created',
+        message: `Booking ${created.bookingId} was created for ${created.applicantName} at ${created.projectName} ${created.plotNumber}.`,
+        triggeredById: user.id,
+        branchId: created.branchId,
+        bookingId: created.id,
+        propertyId: created.propertyId,
+        relatedEntityId: created.id,
+      });
+
+      await this.sendCustomerBookingMessage({
+        senderId: user.id,
+        customerName: created.applicantName,
+        customerMobile: created.cellNumber,
+        branchId: created.branchId,
+        bookingId: created.id,
+        bookingNumber: created.bookingId,
+        projectName: created.projectName,
+        plotNumber: created.plotNumber,
+      });
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -289,6 +473,7 @@ export class BookingsService {
   }
 
   async update(id: string, dto: UpdateBookingDto, user: any) {
+    this.validateCashDenominations(dto);
     const booking = await this.prisma.booking.findUnique({ where: { id } });
     if (!booking) {
       throw new NotFoundException(`Booking with id ${id} not found`);
@@ -309,7 +494,7 @@ export class BookingsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedBooking = await this.prisma.$transaction(async (tx) => {
       // Update booking fields
       await tx.booking.update({
         where: { id },
@@ -398,6 +583,20 @@ export class BookingsService {
         },
       });
     });
+
+    if (updatedBooking) {
+      await this.notifyBookingActivity({
+        title: 'Booking Updated',
+        message: `Booking ${updatedBooking.bookingId} was updated for ${updatedBooking.applicantName}.`,
+        triggeredById: user.id,
+        branchId: updatedBooking.branchId,
+        bookingId: updatedBooking.id,
+        propertyId: updatedBooking.propertyId,
+        relatedEntityId: updatedBooking.id,
+      });
+    }
+
+    return updatedBooking;
   }
 
   async updateStatus(id: string, status: BookingStatus, userId: string) {
@@ -413,7 +612,7 @@ export class BookingsService {
     const previousStatus = booking.status;
     const newWorkflowStatus = BOOKING_TO_WORKFLOW[status];
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       // Update booking status
       const updated = await tx.booking.update({
         where: { id },
@@ -450,8 +649,25 @@ export class BookingsService {
         },
       });
 
+      if (previousStatus !== status)
+        await this.smsService?.booking(tx, updated, status);
       return updated;
     });
+
+    await this.notifyBookingActivity({
+      title:
+        status === BookingStatus.CANCELLED
+          ? 'Booking Cancelled'
+          : 'Booking Status Updated',
+      message: `Booking ${booking.bookingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: booking.branchId,
+      bookingId: booking.id,
+      propertyId: booking.propertyId,
+      relatedEntityId: booking.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

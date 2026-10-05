@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { BillingStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SmsService } from '../sms/sms.service';
 import { CreateBillingDto } from './dto/create-billing.dto';
 import { UpdateBillingDto } from './dto/update-billing.dto';
 import { BillingFilterDto } from './dto/billing-filter.dto';
@@ -15,12 +16,14 @@ import { generateBillingId } from '../../common/utils/id-generator.util';
 import { numberToWords } from '../../common/utils/amount-words.util';
 import { PdfService } from '../pdf/pdf.service';
 import { EstimatePdfData } from '../pdf/templates/estimate-copy.template';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
+    @Optional() private readonly smsService?: SmsService,
   ) {}
 
   async findAll(user: any, filters: BillingFilterDto) {
@@ -46,6 +49,10 @@ export class BillingService {
 
     if (filters.paymentMethod) {
       andClauses.push({ paymentMethod: filters.paymentMethod });
+    }
+
+    if (filters.bookingId) {
+      andClauses.push({ bookingId: filters.bookingId });
     }
 
     if (filters.search) {
@@ -113,6 +120,7 @@ export class BillingService {
 
   async create(dto: CreateBillingDto, user: any) {
     return this.prisma.$transaction(async (tx) => {
+      const billingStatus = dto.status ?? BillingStatus.PENDING;
       // 1. Find booking
       const booking = await tx.booking.findUnique({
         where: { id: dto.bookingId },
@@ -171,7 +179,7 @@ export class BillingService {
           chequeNumber: dto.chequeNumber,
           chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : undefined,
           gpayReference: dto.gpayReference,
-          status: BillingStatus.PENDING,
+          status: billingStatus,
         },
       });
 
@@ -181,11 +189,13 @@ export class BillingService {
           entityType: 'billing',
           entityId: billing.id,
           fromStatus: null,
-          toStatus: BillingStatus.PENDING,
+          toStatus: billingStatus,
           remarks: 'Billing record created',
           performedBy: user.id,
         },
       });
+
+      await this.smsService?.payment(tx, booking, billing);
 
       // Return billing with booking
       return tx.billing.findUnique({
@@ -205,6 +215,37 @@ export class BillingService {
         },
       });
     });
+
+    if (created) {
+      await this.notifyBillingActivity({
+        title: 'Billing Created',
+        message: `Billing ${created.billingId} was created for booking ${created.booking?.bookingId ?? created.bookingId}.`,
+        triggeredById: user.id,
+        branchId: created.booking?.branchId,
+        bookingId: created.bookingId,
+        billingId: created.id,
+        relatedEntityId: created.id,
+      });
+
+      if (created.booking) {
+        await this.sendCustomerBillingMessage({
+          senderId: user.id,
+          customerName: created.buyerName,
+          customerMobile: created.buyerPhone,
+          branchId: created.booking.branchId,
+          bookingId: created.bookingId,
+          bookingNumber: created.booking.bookingId,
+          billingId: created.id,
+          billingNumber: created.billingId,
+          projectName: created.booking.projectName,
+          plotNumber: created.booking.plotNumber,
+          amountReceived: created.totalReceived,
+          totalBalance: created.totalBalance,
+        });
+      }
+    }
+
+    return created;
   }
 
   async findOne(id: string) {
@@ -267,57 +308,86 @@ export class BillingService {
       amountInWords = numberToWords(dto.amountInNumbers);
     }
 
-    return this.prisma.billing.update({
-      where: { id },
-      data: {
-        ...(dto.paymentMethod !== undefined && {
-          paymentMethod: dto.paymentMethod,
-        }),
-        ...(dto.amountInNumbers !== undefined && {
-          amountInNumbers: dto.amountInNumbers,
-        }),
-        ...(amountInWords !== undefined && { amountInWords }),
-        ...(dto.totalReceived !== undefined && {
-          totalReceived: dto.totalReceived,
-        }),
-        ...(dto.operationalNotes !== undefined && {
-          operationalNotes: dto.operationalNotes,
-        }),
-        ...(dto.settlementNotes !== undefined && {
-          settlementNotes: dto.settlementNotes,
-        }),
-        ...(dto.termsConditions !== undefined && {
-          termsConditions: dto.termsConditions,
-        }),
-        ...(dto.status !== undefined && { status: dto.status }),
-        ...(dto.bankName !== undefined && { bankName: dto.bankName }),
-        ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
-        ...(dto.chequeNumber !== undefined && {
-          chequeNumber: dto.chequeNumber,
-        }),
-        ...(dto.chequeDate !== undefined && {
-          chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : null,
-        }),
-        ...(dto.gpayReference !== undefined && {
-          gpayReference: dto.gpayReference,
-        }),
-      },
-      include: {
-        booking: {
-          select: {
-            id: true,
-            bookingId: true,
-            projectName: true,
-            plotNumber: true,
-            applicantName: true,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.billing.update({
+        where: { id },
+        data: {
+          ...(dto.paymentMethod !== undefined && {
+            paymentMethod: dto.paymentMethod,
+          }),
+          ...(dto.amountInNumbers !== undefined && {
+            amountInNumbers: dto.amountInNumbers,
+          }),
+          ...(amountInWords !== undefined && { amountInWords }),
+          ...(dto.totalReceived !== undefined && {
+            totalReceived: dto.totalReceived,
+          }),
+          ...(dto.operationalNotes !== undefined && {
+            operationalNotes: dto.operationalNotes,
+          }),
+          ...(dto.settlementNotes !== undefined && {
+            settlementNotes: dto.settlementNotes,
+          }),
+          ...(dto.termsConditions !== undefined && {
+            termsConditions: dto.termsConditions,
+          }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          ...(dto.bankName !== undefined && { bankName: dto.bankName }),
+          ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
+          ...(dto.chequeNumber !== undefined && {
+            chequeNumber: dto.chequeNumber,
+          }),
+          ...(dto.chequeDate !== undefined && {
+            chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : null,
+          }),
+          ...(dto.gpayReference !== undefined && {
+            gpayReference: dto.gpayReference,
+          }),
+        },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              bookingId: true,
+              projectName: true,
+              plotNumber: true,
+              applicantName: true,
+            },
           },
         },
-      },
+      });
+      if (billing.totalReceived <= 0 && updated.totalReceived > 0) {
+        const booking = await tx.booking.findUniqueOrThrow({
+          where: { id: updated.bookingId },
+        });
+        await this.smsService?.payment(tx, booking, updated);
+      }
+      return updated;
     });
+
+    await this.notifyBillingActivity({
+      title:
+        dto.status && dto.status !== billing.status
+          ? 'Billing Status Updated'
+          : 'Billing Updated',
+      message: `Billing ${updated.billingId} was updated for booking ${updated.booking?.bookingId ?? updated.bookingId}.`,
+      triggeredById: user.id,
+      branchId: billing.booking.branchId,
+      bookingId: updated.bookingId,
+      billingId: updated.id,
+      relatedEntityId: updated.id,
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, status: BillingStatus, userId: string) {
-    const billing = await this.prisma.billing.findUnique({ where: { id } });
+    const billing = await this.prisma.billing.findUnique({
+      where: { id },
+      include: {
+        booking: { select: { id: true, bookingId: true, branchId: true } },
+      },
+    });
     if (!billing) {
       throw new NotFoundException(`Billing record with id ${id} not found`);
     }
@@ -328,7 +398,7 @@ export class BillingService {
 
     const previousStatus = billing.status;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.billing.update({
         where: { id },
         data: { status },
@@ -347,6 +417,18 @@ export class BillingService {
 
       return updated;
     });
+
+    await this.notifyBillingActivity({
+      title: 'Billing Status Updated',
+      message: `Billing ${billing.billingId} status changed from ${previousStatus} to ${status}.`,
+      triggeredById: userId,
+      branchId: billing.booking?.branchId,
+      bookingId: billing.bookingId,
+      billingId: billing.id,
+      relatedEntityId: billing.id,
+    });
+
+    return updated;
   }
 
   async remove(id: string) {

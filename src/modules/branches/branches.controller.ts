@@ -71,7 +71,16 @@ export class BranchesController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['name'],
+      required: [
+        'name',
+        'branchType',
+        'phone',
+        'address',
+        'city',
+        'district',
+        'state',
+        'pincode',
+      ],
       properties: {
         name: { type: 'string', example: 'Chennai Central Branch' },
         branchType: { type: 'string', example: 'Main' },
@@ -97,10 +106,10 @@ export class BranchesController {
   })
   create(
     @Body() dto: CreateBranchDto,
-    @UploadedFiles() files: BranchImageFiles,
+    @UploadedFiles() files: BranchImageFiles | undefined,
     @CurrentUser() user: any,
   ) {
-    return this.branchesService.create(dto, user, files.images ?? []);
+    return this.branchesService.create(dto, user, files?.images ?? []);
   }
 
   @Get(':id')
@@ -133,7 +142,7 @@ export class BranchesController {
           type: 'array',
           items: { type: 'string', format: 'binary' },
           description:
-            'Optional branch images to append. JPEG, PNG, or WebP up to 5 MB each',
+            'Optional replacement branch images. JPEG, PNG, or WebP up to 5 MB each',
         },
         adminId: {
           type: 'string',
@@ -146,9 +155,9 @@ export class BranchesController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBranchDto,
-    @UploadedFiles() files: BranchImageFiles,
+    @UploadedFiles() files: BranchImageFiles | undefined,
   ) {
-    return this.branchesService.update(id, dto, files.images ?? []);
+    return this.branchesService.update(id, dto, files?.images ?? []);
   }
 
   @Post(':id/images')

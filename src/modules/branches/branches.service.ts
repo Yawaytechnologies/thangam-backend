@@ -84,6 +84,7 @@ export class BranchesService {
     user: AuthenticatedUser,
     files: Express.Multer.File[] = [],
   ) {
+    files.forEach((file) => this.validateImageFile(file));
     const { adminId, ...branchData } = dto;
     const assignableAdminId = await this.resolveAssignableAdminId(
       adminId,
@@ -126,7 +127,7 @@ export class BranchesService {
 
     if (this.notificationsService) {
       try {
-        await this.notificationsService.createNotification({
+        await this.notificationsService.dispatch({
           title: 'Branch Created',
           message: `New branch "${branch.name}" (${branch.branchCode}) has been created.`,
           type: 'BRANCH_ACTIVITY',
@@ -384,11 +385,12 @@ export class BranchesService {
 
     if (files.length > 0) {
       const storagePaths = await this.uploadBranchImages(id, files);
-      const existingImages = (branch as { images?: unknown }).images;
-      const images = [...getBranchImages(existingImages), ...storagePaths];
       updated = await this.prisma.branch.update({
         where: { id },
-        data: { images },
+        // An image submitted from Edit Branch replaces the previous image list.
+        // The UI uses the first image as its cover, so appending would leave the
+        // old cover visible even though the new upload succeeded.
+        data: { images: storagePaths },
         include: {
           _count: {
             select: {

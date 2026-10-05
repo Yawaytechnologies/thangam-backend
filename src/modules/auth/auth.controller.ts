@@ -20,6 +20,7 @@ import {
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -118,7 +119,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = req.cookies?.refresh_token;
+    const token = req.cookies?.refresh_token || req.body?.refreshToken;
     if (token) await this.authService.logout(token);
     res.clearCookie('refresh_token');
     return { message: 'Logged out successfully' };
@@ -135,5 +136,17 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   async getMe(@CurrentUser('id') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change the authenticated user password' })
+  changePassword(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto);
   }
 }

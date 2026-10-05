@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, Role } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,11 +12,14 @@ jest.mock('@supabase/supabase-js', () => ({
 
 const upload = jest.fn();
 const createSignedUrl = jest.fn();
+const getBucket = jest.fn();
+const createBucket = jest.fn();
 
 const mockPrisma = {
   booking: { findUnique: jest.fn() },
   billing: { findUnique: jest.fn() },
-  document: { create: jest.fn() },
+  document: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+  property: { findFirst: jest.fn() },
 };
 
 const imageFile = {
@@ -32,6 +35,8 @@ describe('DocumentsService', () => {
   beforeEach(async () => {
     (createClient as jest.Mock).mockReturnValue({
       storage: {
+        getBucket,
+        createBucket,
         from: jest.fn().mockReturnValue({
           upload,
           createSignedUrl,
@@ -39,6 +44,11 @@ describe('DocumentsService', () => {
       },
     });
     upload.mockResolvedValue({ error: null });
+    getBucket.mockResolvedValue({ data: { id: 'sth-files' }, error: null });
+    createBucket.mockResolvedValue({
+      data: { name: 'sth-files' },
+      error: null,
+    });
     createSignedUrl.mockResolvedValue({
       data: { signedUrl: 'https://signed.example.com/site.png' },
       error: null,
@@ -74,6 +84,35 @@ describe('DocumentsService', () => {
 
     service = module.get<DocumentsService>(DocumentsService);
     jest.clearAllMocks();
+  });
+
+  it('rejects a direct URL request for another branch property document', async () => {
+    mockPrisma.document.findUnique.mockResolvedValue({
+      entityType: 'property',
+      entityId: 'other-property',
+      storagePath: 'private.pdf',
+    });
+    mockPrisma.property.findFirst.mockResolvedValue(null);
+    await expect(
+      service.getDocumentWithUrl('doc-other', {
+        id: 'admin',
+        role: Role.ADMIN,
+        admin: { branchId: 'branch-a' },
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('rejects listing documents for another branch property', async () => {
+    mockPrisma.property.findFirst.mockResolvedValue(null);
+    await expect(
+      service.getDocumentsForEntity('property', 'other-property', {
+        id: 'member',
+        role: Role.DIRECTOR,
+        member: { branchId: 'branch-a' },
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(mockPrisma.document.findMany).not.toHaveBeenCalled();
   });
 
   it('uploads booking images as BOOKING_IMAGE documents', async () => {
@@ -125,5 +164,27 @@ describe('DocumentsService', () => {
     await expect(
       service.uploadBillingImages('missing', [imageFile], 'user-1'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('creates the private storage bucket when it is missing', async () => {
+    getBucket.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Bucket not found', statusCode: '404' },
+    });
+
+    await service.upload(
+      imageFile,
+      'admin',
+      'admin-1',
+      'PROFILE_PHOTO',
+      'user-1',
+    );
+
+    expect(createBucket).toHaveBeenCalledWith('sth-files', {
+      public: false,
+      fileSizeLimit: 5 * 1024 * 1024,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    });
+    expect(upload).toHaveBeenCalled();
   });
 });

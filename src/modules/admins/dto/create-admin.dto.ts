@@ -6,6 +6,7 @@ import {
   IsEmail,
   MinLength,
   IsEnum,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserStatus } from '@prisma/client';
@@ -19,12 +20,15 @@ export class CreateAdminDto {
   @ApiProperty({ example: '9876543210' })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[789]\d{9}$/, {
+    message: 'phone must contain exactly 10 digits and start with 7, 8, or 9',
+  })
   phone: string;
 
-  @ApiPropertyOptional({ example: 'rajan@srithangam.com' })
+  @ApiProperty({ example: 'rajan@srithangam.com' })
   @IsEmail()
-  @IsOptional()
-  email?: string;
+  @IsNotEmpty()
+  email: string;
 
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   @IsUUID()

@@ -20,6 +20,7 @@ import { Role } from '@prisma/client';
 import { NotificationsService } from './notifications.service';
 import { NotificationFilterDto } from './dto/notification-filter.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -47,7 +48,7 @@ export class NotificationsController {
   })
   @ApiResponse({ status: 200, description: 'Latest notifications' })
   findLatest(@CurrentUser() user: any) {
-    return this.notificationsService.findLatest(user.id);
+    return this.notificationsService.findLatest(user);
   }
 
   // GET /notifications/unread-count
@@ -61,7 +62,7 @@ export class NotificationsController {
     schema: { example: { count: 5 } },
   })
   async getUnreadCount(@CurrentUser() user: any): Promise<{ count: number }> {
-    const count = await this.notificationsService.getUnreadCount(user.id);
+    const count = await this.notificationsService.getUnreadCount(user);
     return { count };
   }
 
@@ -70,7 +71,18 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark all unread notifications as read' })
   @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   markAllRead(@CurrentUser() user: any) {
-    return this.notificationsService.markAllRead(user.id);
+    return this.notificationsService.markAllRead(user);
+  }
+
+  @Post('announcements')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Send an announcement to authorized Directors' })
+  @ApiResponse({ status: 201, description: 'Announcement sent' })
+  createAnnouncement(
+    @Body() dto: CreateAnnouncementDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.notificationsService.createAnnouncement(dto, user);
   }
 
   // POST /notifications/send-message
@@ -89,7 +101,7 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notification detail' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    return this.notificationsService.findOne(id, user.id);
+    return this.notificationsService.findOne(id, user);
   }
 
   // PATCH /notifications/:id/read
@@ -99,6 +111,6 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   markRead(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    return this.notificationsService.markRead(id, user.id);
+    return this.notificationsService.markRead(id, user);
   }
 }

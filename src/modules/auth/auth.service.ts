@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 @Injectable()
@@ -107,6 +108,29 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
     const { passwordHash: _, ...safe } = user;
     return safe;
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (
+      !user ||
+      !(await bcrypt.compare(dto.currentPassword, user.passwordHash))
+    ) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+    if (dto.currentPassword === dto.newPassword)
+      throw new BadRequestException('Choose a different new password');
+    if (Buffer.byteLength(dto.newPassword, 'utf8') > 72)
+      throw new BadRequestException('New password is too long');
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      }),
+      this.prisma.session.deleteMany({ where: { userId } }),
+    ]);
+    return { message: 'Password changed. Please sign in again.' };
   }
 
   private async generateTokens(

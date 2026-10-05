@@ -1,4 +1,8 @@
 import {
+  assertPropertyAccess,
+  PropertyViewer,
+} from '../../common/utils/property-access';
+import {
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -18,6 +22,7 @@ export class DocumentsService {
   private readonly maxImageBytes = 5 * 1024 * 1024;
   private readonly supabase: SupabaseClient;
   private readonly bucket: string;
+  private bucketReady?: Promise<void>;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -30,7 +35,57 @@ export class DocumentsService {
     this.bucket =
       this.configService.get<string>('supabase.bucket') ?? 'sth-files';
 
-    this.supabase = createClient(supabaseUrl!, serviceRoleKey!);
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error(
+        'Supabase storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+      );
+    }
+
+    this.supabase = createClient(supabaseUrl, serviceRoleKey);
+  }
+
+  private async ensureStorageBucket(): Promise<void> {
+    if (!this.bucketReady) {
+      this.bucketReady = this.initializeStorageBucket().catch((error) => {
+        this.bucketReady = undefined;
+        throw error;
+      });
+    }
+    return this.bucketReady;
+  }
+
+  private async initializeStorageBucket(): Promise<void> {
+    const { data, error } = await this.supabase.storage.getBucket(this.bucket);
+    if (data && !error) return;
+
+    const isMissing =
+      error?.message?.toLowerCase().includes('not found') ||
+      String((error as { statusCode?: string | number } | null)?.statusCode) ===
+        '404';
+
+    if (!isMissing) {
+      throw new BadRequestException(
+        `Unable to access storage bucket "${this.bucket}": ${error?.message ?? 'Unknown error'}`,
+      );
+    }
+
+    const { error: createError } = await this.supabase.storage.createBucket(
+      this.bucket,
+      {
+        public: false,
+        fileSizeLimit: this.maxImageBytes,
+        allowedMimeTypes: this.allowedImageMimeTypes,
+      },
+    );
+
+    if (
+      createError &&
+      !createError.message.toLowerCase().includes('already exists')
+    ) {
+      throw new BadRequestException(
+        `Unable to create storage bucket "${this.bucket}": ${createError.message}. Verify SUPABASE_SERVICE_ROLE_KEY belongs to the configured project.`,
+      );
+    }
   }
 
   async upload(
@@ -40,14 +95,26 @@ export class DocumentsService {
     documentType: DocumentType,
     uploadedBy: string,
   ): Promise<Document> {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
     const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
 
-    const { error } = await this.supabase.storage
-      .from(this.bucket)
-      .upload(storagePath, file.buffer, { contentType: file.mimetype });
+    let uploadError: Error | null = null;
+    try {
+      const { error } = await this.supabase.storage
+        .from(this.bucket)
+        .upload(storagePath, file.buffer, { contentType: file.mimetype });
+      uploadError = error;
+    } catch (error) {
+      uploadError = error instanceof Error ? error : new Error(String(error));
+    }
 
-    if (error) {
-      throw new BadRequestException(`File upload failed: ${error.message}`);
+    if (uploadError) {
+      throw new BadRequestException(
+        `File upload failed. Check Supabase URL, service-role key, bucket "${this.bucket}", and backend network access. ${uploadError.message}`,
+      );
     }
 
     const document = await this.prisma.document.create({
@@ -77,6 +144,34 @@ export class DocumentsService {
       'booking',
       bookingId,
       DocumentType.BOOKING_IMAGE,
+      uploadedBy,
+    );
+  }
+
+  async uploadBookingSignature(
+    bookingId: string,
+    file: Express.Multer.File | undefined,
+    uploadedBy: string,
+  ): Promise<Document> {
+    await this.ensureBookingExists(bookingId);
+    if (!file) {
+      throw new BadRequestException('Applicant signature file is required');
+    }
+    if (!['image/jpeg', 'image/png'].includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Applicant signature must be a PNG or JPEG image',
+      );
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      throw new BadRequestException(
+        'Applicant signature must be 2 MB or smaller',
+      );
+    }
+    return this.upload(
+      file,
+      'booking',
+      bookingId,
+      DocumentType.BOOKING_DOCUMENT,
       uploadedBy,
     );
   }
@@ -161,6 +256,7 @@ export class DocumentsService {
     entityType: string,
     entityId: string,
   ): Promise<string> {
+    await this.ensureStorageBucket();
     const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
 
     const { error } = await this.supabase.storage
@@ -191,7 +287,10 @@ export class DocumentsService {
   async getDocumentsForEntity(
     entityType: string,
     entityId: string,
+    user: PropertyViewer,
   ): Promise<Document[]> {
+    if (entityType === 'property')
+      await assertPropertyAccess(this.prisma, entityId, user);
     return this.prisma.document.findMany({
       where: { entityType, entityId },
       orderBy: { createdAt: 'desc' },
@@ -217,6 +316,7 @@ export class DocumentsService {
 
   async getDocumentWithUrl(
     documentId: string,
+    user: PropertyViewer,
   ): Promise<Document & { signedUrl: string }> {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
@@ -226,6 +326,8 @@ export class DocumentsService {
       throw new NotFoundException(`Document with id ${documentId} not found`);
     }
 
+    if (document.entityType === 'property')
+      await assertPropertyAccess(this.prisma, document.entityId, user);
     const signedUrl = await this.getSignedUrl(document.storagePath);
 
     return { ...document, signedUrl };
