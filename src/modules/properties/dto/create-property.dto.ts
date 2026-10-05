@@ -1,15 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
+  IsDivisibleBy,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  Matches,
   Min,
 } from 'class-validator';
 import { PropertyType } from '@prisma/client';
 
 export class CreatePropertyDto {
+  @ApiProperty({ description: 'Branch UUID that owns this property' })
+  @IsUUID()
+  @IsNotEmpty()
+  branchId: string;
+
   @ApiProperty({ description: 'Name of the property' })
   @IsString()
   @IsNotEmpty()
@@ -35,11 +43,16 @@ export class CreatePropertyDto {
   @IsNotEmpty()
   propertyType: PropertyType;
 
-  @ApiPropertyOptional({ description: 'Area in square feet' })
+  @ApiProperty({
+    description: 'Area in square feet',
+    minimum: 100,
+    example: 1200,
+  })
   @IsNumber()
-  @Min(0)
-  @IsOptional()
-  squareFeet?: number;
+  @Min(100)
+  @IsDivisibleBy(50, { message: 'squareFeet must increase in multiples of 50' })
+  @IsNotEmpty()
+  squareFeet: number;
 
   @ApiPropertyOptional({ description: 'Facing direction of the property' })
   @IsString()
@@ -51,25 +64,26 @@ export class CreatePropertyDto {
   @IsOptional()
   address?: string;
 
-  @ApiPropertyOptional({ description: 'City' })
+  @ApiProperty({ description: 'City' })
   @IsString()
-  @IsOptional()
-  city?: string;
+  @IsNotEmpty()
+  city: string;
 
-  @ApiPropertyOptional({ description: 'District' })
+  @ApiProperty({ description: 'District' })
   @IsString()
-  @IsOptional()
-  district?: string;
+  @IsNotEmpty()
+  district: string;
 
-  @ApiPropertyOptional({ description: 'State' })
+  @ApiProperty({ description: 'State' })
   @IsString()
-  @IsOptional()
-  state?: string;
+  @IsNotEmpty()
+  state: string;
 
-  @ApiPropertyOptional({ description: 'PIN code' })
+  @ApiProperty({ description: 'Six-digit PIN code', example: '600001' })
   @IsString()
-  @IsOptional()
-  pincode?: string;
+  @Matches(/^\d{6}$/, { message: 'pincode must be exactly 6 digits' })
+  @IsNotEmpty()
+  pincode: string;
 
   @ApiPropertyOptional({ description: 'Map location URL or coordinates' })
   @IsString()

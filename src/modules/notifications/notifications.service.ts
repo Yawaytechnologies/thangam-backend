@@ -1,8 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, NotificationStatus, Role } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  NotificationType,
+  NotificationStatus,
+  Role,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationFilterDto } from './dto/notification-filter.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
 export interface DispatchPayload {
   title: string;
@@ -16,6 +27,7 @@ export interface DispatchPayload {
   propertyId?: string;
   bookingId?: string;
   billingId?: string;
+  recipientUserIds?: string[];
 }
 
 // Kept for backward compatibility with existing callers (e.g. AdminsService)
@@ -34,8 +46,38 @@ export interface CreateNotificationDto {
   relatedEntityId?: string;
 }
 
+interface NotificationViewer {
+  id: string;
+  role: Role;
+  admin?: { branchId: string | null } | null;
+  member?: { branchId: string | null } | null;
+}
+
 @Injectable()
 export class NotificationsService {
+  private visibility(user: NotificationViewer): Prisma.NotificationWhereInput {
+    if (user.role === Role.SUPER_ADMIN) return {};
+    const branchId =
+      user.role === Role.ADMIN ? user.admin?.branchId : user.member?.branchId;
+    if (!branchId)
+      throw new ForbiddenException('Your account has no assigned branch');
+    return {
+      OR: [{ branchId }, { branchId: null }],
+      ...(user.role === Role.DIRECTOR
+        ? {
+            type: {
+              in: [
+                NotificationType.ADMIN_ACTIVITY,
+                NotificationType.MEMBER_ACTIVITY,
+                NotificationType.SYSTEM_ACTIVITY,
+                NotificationType.TEAM_ACTIVITY,
+              ],
+            },
+          }
+        : {}),
+    };
+  }
+
   // Gateway is injected via setter to avoid circular dependency
   private gateway: {
     emitToUser(userId: string, event: string, data: any): void;
@@ -76,6 +118,16 @@ export class NotificationsService {
         })),
         skipDuplicates: true,
       });
+
+      if (this.gateway) {
+        const payload = {
+          ...notification,
+          status: NotificationStatus.UNREAD,
+        };
+        dto.recipientUserIds.forEach((userId) =>
+          this.gateway!.emitToUser(userId, 'notification:new', payload),
+        );
+      }
     }
 
     return notification;
@@ -103,6 +155,10 @@ export class NotificationsService {
 
     // Step 2: Resolve recipients
     const recipientUserIds = new Set<string>();
+
+    // Include explicitly targeted users (for example, the member's actual
+    // Director resolved through the reportsToId hierarchy).
+    payload.recipientUserIds?.forEach((userId) => recipientUserIds.add(userId));
 
     // Always include all SUPER_ADMIN users
     const superAdmins = await this.prisma.user.findMany({
@@ -243,20 +299,13 @@ export class NotificationsService {
       ];
     }
 
-    // Apply role-scoped branch filtering on the notification
-    if (user.role === Role.SUPER_ADMIN) {
-      if (branchId) notificationWhere.branchId = branchId;
-    } else if (user.role === Role.ADMIN) {
-      notificationWhere.branchId = user.admin?.branchId;
-    } else if (user.member?.role === Role.DIRECTOR) {
-      // Director sees notifications linked to their network - filter by branchId of their branch
-      notificationWhere.branchId = user.member?.branchId;
-    }
+    if (user.role === Role.SUPER_ADMIN && branchId)
+      notificationWhere.branchId = branchId;
 
     // Build recipient where clause
     const recipientWhere: any = {
       userId: user.id,
-      notification: notificationWhere,
+      notification: { AND: [this.visibility(user), notificationWhere] },
     };
 
     if (status) recipientWhere.status = status;
@@ -270,6 +319,7 @@ export class NotificationsService {
         include: {
           notification: {
             include: {
+              branch: { select: { id: true, name: true, branchCode: true } },
               triggeredBy: {
                 select: { id: true, role: true, email: true, phone: true },
               },
@@ -285,23 +335,28 @@ export class NotificationsService {
 
   // ─── findLatest ───────────────────────────────────────────────────────────
 
-  async findLatest(userId: string) {
+  async findLatest(user: NotificationViewer) {
     return this.prisma.notificationRecipient.findMany({
-      where: { userId },
+      where: { userId: user.id, notification: this.visibility(user) },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
-        notification: true,
+        notification: {
+          include: {
+            branch: { select: { id: true, name: true, branchCode: true } },
+          },
+        },
       },
     });
   }
 
   // ─── getUnreadCount ───────────────────────────────────────────────────────
 
-  async getUnreadCount(userId: string): Promise<number> {
+  async getUnreadCount(user: NotificationViewer): Promise<number> {
     return this.prisma.notificationRecipient.count({
       where: {
-        userId,
+        userId: user.id,
+        notification: this.visibility(user),
         status: NotificationStatus.UNREAD,
       },
     });
@@ -309,15 +364,17 @@ export class NotificationsService {
 
   // ─── findOne ──────────────────────────────────────────────────────────────
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, user: NotificationViewer) {
     const recipient = await this.prisma.notificationRecipient.findFirst({
       where: {
         notificationId: id,
-        userId,
+        userId: user.id,
+        notification: this.visibility(user),
       },
       include: {
         notification: {
           include: {
+            branch: { select: { id: true, name: true, branchCode: true } },
             triggeredBy: {
               select: { id: true, role: true, email: true, phone: true },
             },
@@ -335,9 +392,13 @@ export class NotificationsService {
 
   // ─── markRead ─────────────────────────────────────────────────────────────
 
-  async markRead(notificationId: string, userId: string) {
+  async markRead(notificationId: string, user: NotificationViewer) {
     const recipient = await this.prisma.notificationRecipient.findFirst({
-      where: { notificationId, userId },
+      where: {
+        notificationId,
+        userId: user.id,
+        notification: this.visibility(user),
+      },
     });
 
     if (!recipient) {
@@ -355,10 +416,11 @@ export class NotificationsService {
 
   // ─── markAllRead ──────────────────────────────────────────────────────────
 
-  async markAllRead(userId: string) {
+  async markAllRead(user: NotificationViewer) {
     const result = await this.prisma.notificationRecipient.updateMany({
       where: {
-        userId,
+        userId: user.id,
+        notification: this.visibility(user),
         status: NotificationStatus.UNREAD,
       },
       data: {
@@ -368,6 +430,85 @@ export class NotificationsService {
     });
 
     return { updated: result.count };
+  }
+
+  async createAnnouncement(dto: CreateAnnouncementDto, sender: any) {
+    const requestedIds = [...new Set(dto.recipientUserIds ?? [])];
+    if (!dto.sendToAllDirectors && requestedIds.length === 0) {
+      throw new BadRequestException(
+        'Select at least one Director or choose all Directors',
+      );
+    }
+
+    const adminBranchId =
+      sender.role === Role.ADMIN ? sender.admin?.branchId : undefined;
+    if (sender.role === Role.ADMIN && !adminBranchId) {
+      throw new ForbiddenException('Admin branch is not available');
+    }
+
+    const effectiveBranchId = adminBranchId ?? dto.branchId;
+    const directors = await this.prisma.user.findMany({
+      where: {
+        role: Role.DIRECTOR,
+        status: 'ACTIVE',
+        ...(dto.sendToAllDirectors ? {} : { id: { in: requestedIds } }),
+        member: effectiveBranchId
+          ? { is: { branchId: effectiveBranchId } }
+          : { isNot: null },
+      },
+      select: {
+        id: true,
+        member: { select: { branchId: true } },
+      },
+    });
+
+    if (!dto.sendToAllDirectors && directors.length !== requestedIds.length) {
+      throw new ForbiddenException(
+        'One or more selected Directors are outside your permitted scope',
+      );
+    }
+    if (directors.length === 0) {
+      throw new BadRequestException('No active Directors found');
+    }
+
+    const recipientUserIds = directors.map((director) => director.id);
+    const announcement = await this.prisma.$transaction(async (tx) => {
+      const notification = await tx.notification.create({
+        data: {
+          title: dto.title.trim(),
+          message: dto.message.trim(),
+          type: NotificationType.ADMIN_ACTIVITY,
+          priority: dto.priority ?? 'NORMAL',
+          triggeredById: sender.id,
+          branchId: effectiveBranchId ?? null,
+          relatedModule: 'DIRECTOR_ANNOUNCEMENT',
+        },
+      });
+
+      await tx.notificationRecipient.createMany({
+        data: recipientUserIds.map((userId) => ({
+          notificationId: notification.id,
+          userId,
+          status: NotificationStatus.UNREAD,
+        })),
+      });
+      return notification;
+    });
+
+    if (this.gateway) {
+      const payload = {
+        ...announcement,
+        status: NotificationStatus.UNREAD,
+      };
+      recipientUserIds.forEach((userId) =>
+        this.gateway!.emitToUser(userId, 'notification:new', payload),
+      );
+    }
+
+    return {
+      notification: announcement,
+      recipientCount: recipientUserIds.length,
+    };
   }
 
   // ─── sendMessage ──────────────────────────────────────────────────────────

@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 import { PropertyType, WorkflowStatus } from '@prisma/client';
 
 export class PropertyFilterDto {
@@ -45,7 +52,7 @@ export class PropertyFilterDto {
   limit?: number = 20;
 
   @ApiPropertyOptional({ description: 'Filter by branch UUID' })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   branchId?: string;
 }

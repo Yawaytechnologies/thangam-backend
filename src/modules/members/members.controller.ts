@@ -77,8 +77,11 @@ export class MembersController {
 
   @Get('team/:id')
   @ApiOperation({ summary: 'Get member bottom sheet for mobile' })
-  getMemberBottomSheet(@Param('id', ParseUUIDPipe) id: string) {
-    return this.membersService.getMemberBottomSheet(id);
+  getMemberBottomSheet(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.membersService.getMemberBottomSheet(id, user);
   }
 
   @Get(':id')

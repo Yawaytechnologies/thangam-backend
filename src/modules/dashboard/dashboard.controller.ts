@@ -81,4 +81,13 @@ export class DashboardController {
   getUserAlerts(@CurrentUser() user: any) {
     return this.dashboardService.getUserAlerts(user.member?.id);
   }
+
+  @Get('user/hierarchy')
+  @Roles(...MOBILE_ROLES)
+  @ApiOperation({
+    summary: 'Authenticated member and their exact reporting downline',
+  })
+  getUserHierarchy(@CurrentUser('id') userId: string) {
+    return this.dashboardService.getUserHierarchy(userId);
+  }
 }

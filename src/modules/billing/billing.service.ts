@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { BillingStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SmsService } from '../sms/sms.service';
 import { CreateBillingDto } from './dto/create-billing.dto';
 import { UpdateBillingDto } from './dto/update-billing.dto';
 import { BillingFilterDto } from './dto/billing-filter.dto';
@@ -21,6 +22,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
+    @Optional() private readonly smsService?: SmsService,
   ) {}
 
   async findAll(user: any, filters: BillingFilterDto) {
@@ -46,6 +48,10 @@ export class BillingService {
 
     if (filters.paymentMethod) {
       andClauses.push({ paymentMethod: filters.paymentMethod });
+    }
+
+    if (filters.bookingId) {
+      andClauses.push({ bookingId: filters.bookingId });
     }
 
     if (filters.search) {
@@ -113,6 +119,7 @@ export class BillingService {
 
   async create(dto: CreateBillingDto, user: any) {
     return this.prisma.$transaction(async (tx) => {
+      const billingStatus = dto.status ?? BillingStatus.PENDING;
       // 1. Find booking
       const booking = await tx.booking.findUnique({
         where: { id: dto.bookingId },
@@ -171,7 +178,7 @@ export class BillingService {
           chequeNumber: dto.chequeNumber,
           chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : undefined,
           gpayReference: dto.gpayReference,
-          status: BillingStatus.PENDING,
+          status: billingStatus,
         },
       });
 
@@ -181,11 +188,13 @@ export class BillingService {
           entityType: 'billing',
           entityId: billing.id,
           fromStatus: null,
-          toStatus: BillingStatus.PENDING,
+          toStatus: billingStatus,
           remarks: 'Billing record created',
           performedBy: user.id,
         },
       });
+
+      await this.smsService?.payment(tx, booking, billing);
 
       // Return billing with booking
       return tx.billing.findUnique({
@@ -267,52 +276,61 @@ export class BillingService {
       amountInWords = numberToWords(dto.amountInNumbers);
     }
 
-    return this.prisma.billing.update({
-      where: { id },
-      data: {
-        ...(dto.paymentMethod !== undefined && {
-          paymentMethod: dto.paymentMethod,
-        }),
-        ...(dto.amountInNumbers !== undefined && {
-          amountInNumbers: dto.amountInNumbers,
-        }),
-        ...(amountInWords !== undefined && { amountInWords }),
-        ...(dto.totalReceived !== undefined && {
-          totalReceived: dto.totalReceived,
-        }),
-        ...(dto.operationalNotes !== undefined && {
-          operationalNotes: dto.operationalNotes,
-        }),
-        ...(dto.settlementNotes !== undefined && {
-          settlementNotes: dto.settlementNotes,
-        }),
-        ...(dto.termsConditions !== undefined && {
-          termsConditions: dto.termsConditions,
-        }),
-        ...(dto.status !== undefined && { status: dto.status }),
-        ...(dto.bankName !== undefined && { bankName: dto.bankName }),
-        ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
-        ...(dto.chequeNumber !== undefined && {
-          chequeNumber: dto.chequeNumber,
-        }),
-        ...(dto.chequeDate !== undefined && {
-          chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : null,
-        }),
-        ...(dto.gpayReference !== undefined && {
-          gpayReference: dto.gpayReference,
-        }),
-      },
-      include: {
-        booking: {
-          select: {
-            id: true,
-            bookingId: true,
-            projectName: true,
-            plotNumber: true,
-            applicantName: true,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.billing.update({
+        where: { id },
+        data: {
+          ...(dto.paymentMethod !== undefined && {
+            paymentMethod: dto.paymentMethod,
+          }),
+          ...(dto.amountInNumbers !== undefined && {
+            amountInNumbers: dto.amountInNumbers,
+          }),
+          ...(amountInWords !== undefined && { amountInWords }),
+          ...(dto.totalReceived !== undefined && {
+            totalReceived: dto.totalReceived,
+          }),
+          ...(dto.operationalNotes !== undefined && {
+            operationalNotes: dto.operationalNotes,
+          }),
+          ...(dto.settlementNotes !== undefined && {
+            settlementNotes: dto.settlementNotes,
+          }),
+          ...(dto.termsConditions !== undefined && {
+            termsConditions: dto.termsConditions,
+          }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          ...(dto.bankName !== undefined && { bankName: dto.bankName }),
+          ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
+          ...(dto.chequeNumber !== undefined && {
+            chequeNumber: dto.chequeNumber,
+          }),
+          ...(dto.chequeDate !== undefined && {
+            chequeDate: dto.chequeDate ? new Date(dto.chequeDate) : null,
+          }),
+          ...(dto.gpayReference !== undefined && {
+            gpayReference: dto.gpayReference,
+          }),
+        },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              bookingId: true,
+              projectName: true,
+              plotNumber: true,
+              applicantName: true,
+            },
           },
         },
-      },
+      });
+      if (billing.totalReceived <= 0 && updated.totalReceived > 0) {
+        const booking = await tx.booking.findUniqueOrThrow({
+          where: { id: updated.bookingId },
+        });
+        await this.smsService?.payment(tx, booking, updated);
+      }
+      return updated;
     });
   }
 

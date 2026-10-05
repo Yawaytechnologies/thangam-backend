@@ -1,9 +1,20 @@
 import {
+  propertyBranch,
+  PropertyViewer,
+} from '../../common/utils/property-access';
+import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Billing, Document, DocumentType, WorkflowStatus } from '@prisma/client';
+import {
+  Billing,
+  Document,
+  DocumentType,
+  Prisma,
+  WorkflowStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
 import { generatePropertyId } from '../../common/utils/id-generator.util';
@@ -25,6 +36,34 @@ export class PropertiesService {
     private readonly documentsService: DocumentsService,
   ) {}
 
+  private async generateNextPropertyId(
+    tx: Prisma.TransactionClient,
+  ): Promise<string> {
+    const properties = await tx.property.findMany({
+      select: { propertyId: true },
+    });
+    const maxSequence = properties.reduce((max, property) => {
+      const match = /^STH-PROP-(\d+)$/.exec(property.propertyId);
+      if (!match) return max;
+      const sequence = Number(match[1]);
+      return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+    }, 0);
+    return generatePropertyId(maxSequence + 1);
+  }
+
+  private hasUniqueTarget(error: unknown, target: string): boolean {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== 'P2002'
+    ) {
+      return false;
+    }
+    const errorTarget = error.meta?.target;
+    return Array.isArray(errorTarget)
+      ? errorTarget.includes(target)
+      : typeof errorTarget === 'string' && errorTarget.includes(target);
+  }
+
   private async attachSignedUrls(documents: Document[]) {
     return Promise.all(
       documents.map(async (doc) => {
@@ -42,7 +81,8 @@ export class PropertiesService {
     );
   }
 
-  async findAll(filters: PropertyFilterDto) {
+  async findAll(filters: PropertyFilterDto, user: PropertyViewer) {
+    const branchId = propertyBranch(user) ?? filters.branchId;
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -66,8 +106,7 @@ export class PropertiesService {
       where.workflowStatus = filters.workflowStatus;
     }
 
-    // Note: Property has no direct branchId — filter via bookings if needed
-    // if (filters.branchId) { where.branchId = filters.branchId; }
+    if (branchId) where.branchId = branchId;
 
     const [total, properties] = await this.prisma.$transaction([
       this.prisma.property.count({ where }),
@@ -92,6 +131,9 @@ export class PropertiesService {
             select: { bookings: true },
           },
           documents: true,
+          branch: {
+            select: { id: true, branchCode: true, name: true, status: true },
+          },
         },
       }),
     ]);
@@ -125,43 +167,81 @@ export class PropertiesService {
   }
 
   async create(dto: CreatePropertyDto, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const count = await tx.property.count();
-      const propertyId = generatePropertyId(count + 1);
-
-      const property = await tx.property.create({
-        data: {
-          propertyId,
-          propertyName: dto.propertyName,
-          propertyCode: dto.propertyCode,
-          projectName: dto.projectName,
-          plotNumber: dto.plotNumber,
-          propertyType: dto.propertyType,
-          squareFeet: dto.squareFeet,
-          facing: dto.facing,
-          address: dto.address,
-          city: dto.city,
-          district: dto.district,
-          state: dto.state,
-          pincode: dto.pincode,
-          mapLocation: dto.mapLocation,
-          workflowStatus: WorkflowStatus.AVAILABLE,
-        },
-      });
-
-      await tx.workflowHistory.create({
-        data: {
-          entityType: 'property',
-          entityId: property.id,
-          fromStatus: null,
-          toStatus: WorkflowStatus.AVAILABLE,
-          remarks: 'Property created',
-          performedBy: userId,
-        },
-      });
-
-      return property;
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: dto.branchId },
+      select: { id: true },
     });
+    if (!branch) {
+      throw new BadRequestException('Selected branch does not exist');
+    }
+
+    const propertyCode = dto.propertyCode?.trim() || null;
+    if (propertyCode) {
+      const duplicate = await this.prisma.property.findUnique({
+        where: { propertyCode },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          `Property code "${propertyCode}" already exists`,
+        );
+      }
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const propertyId = await this.generateNextPropertyId(tx);
+
+          const property = await tx.property.create({
+            data: {
+              propertyId,
+              branchId: dto.branchId,
+              propertyName: dto.propertyName,
+              propertyCode,
+              projectName: dto.projectName,
+              plotNumber: dto.plotNumber,
+              propertyType: dto.propertyType,
+              squareFeet: dto.squareFeet,
+              facing: dto.facing,
+              address: dto.address,
+              city: dto.city,
+              district: dto.district,
+              state: dto.state,
+              pincode: dto.pincode,
+              mapLocation: dto.mapLocation,
+              workflowStatus: WorkflowStatus.AVAILABLE,
+            },
+          });
+
+          await tx.workflowHistory.create({
+            data: {
+              entityType: 'property',
+              entityId: property.id,
+              fromStatus: null,
+              toStatus: WorkflowStatus.AVAILABLE,
+              remarks: 'Property created',
+              performedBy: userId,
+            },
+          });
+
+          return property;
+        });
+      } catch (error) {
+        if (this.hasUniqueTarget(error, 'property_code')) {
+          throw new ConflictException(
+            `Property code "${propertyCode}" already exists`,
+          );
+        }
+        if (!this.hasUniqueTarget(error, 'property_id') || attempt === 3) {
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException(
+      'Could not generate a unique property ID. Please try again.',
+    );
   }
 
   async findOne(id: string) {
@@ -179,6 +259,9 @@ export class PropertiesService {
           orderBy: { createdAt: 'asc' },
         },
         documents: true,
+        branch: {
+          select: { id: true, branchCode: true, name: true, status: true },
+        },
       },
     });
 
@@ -360,9 +443,20 @@ export class PropertiesService {
       throw new NotFoundException(`Property with id ${id} not found`);
     }
 
+    if (dto.branchId !== undefined) {
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: dto.branchId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new BadRequestException('Selected branch does not exist');
+      }
+    }
+
     return this.prisma.property.update({
       where: { id },
       data: {
+        ...(dto.branchId !== undefined && { branchId: dto.branchId }),
         ...(dto.propertyName !== undefined && {
           propertyName: dto.propertyName,
         }),

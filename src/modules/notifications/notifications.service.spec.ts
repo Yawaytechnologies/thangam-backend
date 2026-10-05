@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
-import { NotificationStatus, NotificationType } from '@prisma/client';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotificationStatus, NotificationType, Role } from '@prisma/client';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -11,6 +11,7 @@ const mockPrisma = {
     findFirst: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    createMany: jest.fn(),
   },
   notification: {
     findUnique: jest.fn(),
@@ -18,6 +19,7 @@ const mockPrisma = {
   },
   user: { findMany: jest.fn() },
   notificationMessage: { create: jest.fn() },
+  $transaction: jest.fn(),
 };
 
 describe('NotificationsService', () => {
@@ -33,6 +35,153 @@ describe('NotificationsService', () => {
 
     service = module.get<NotificationsService>(NotificationsService);
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation((callback) =>
+      callback(mockPrisma),
+    );
+  });
+
+  describe('visibility consistency', () => {
+    const director = {
+      id: 'director',
+      role: Role.DIRECTOR,
+      member: { branchId: 'branch-a' },
+    };
+
+    it('uses the same scope for the list, latest, unread count and read actions', async () => {
+      mockPrisma.$transaction.mockImplementation((queries) =>
+        Promise.all(queries),
+      );
+      mockPrisma.notificationRecipient.findMany.mockResolvedValue([]);
+      mockPrisma.notificationRecipient.count.mockResolvedValue(0);
+      mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
+      mockPrisma.notificationRecipient.updateMany.mockResolvedValue({
+        count: 0,
+      });
+      await service.findAll(director, {});
+      const scope =
+        mockPrisma.notificationRecipient.findMany.mock.calls[0][0].where
+          .notification.AND[0];
+      expect(scope.OR).toEqual([{ branchId: 'branch-a' }, { branchId: null }]);
+      expect(scope.type.in).not.toContain(NotificationType.BILLING_ACTIVITY);
+      expect(scope.type.in).toContain(NotificationType.ADMIN_ACTIVITY);
+      await service.findLatest(director);
+      expect(
+        mockPrisma.notificationRecipient.findMany,
+      ).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { userId: director.id, notification: scope },
+        }),
+      );
+      await service.getUnreadCount(director);
+      expect(mockPrisma.notificationRecipient.count).toHaveBeenLastCalledWith({
+        where: { userId: director.id, notification: scope, status: 'UNREAD' },
+      });
+      await expect(service.markRead('hidden', director)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(
+        mockPrisma.notificationRecipient.findFirst,
+      ).toHaveBeenLastCalledWith({
+        where: {
+          notificationId: 'hidden',
+          userId: director.id,
+          notification: scope,
+        },
+      });
+      await service.markAllRead(director);
+      expect(
+        mockPrisma.notificationRecipient.updateMany,
+      ).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { userId: director.id, notification: scope, status: 'UNREAD' },
+        }),
+      );
+    });
+
+    it('intersects the selected type with Director permissions instead of replacing it', async () => {
+      mockPrisma.$transaction.mockImplementation((queries) =>
+        Promise.all(queries),
+      );
+      mockPrisma.notificationRecipient.findMany.mockResolvedValue([]);
+      mockPrisma.notificationRecipient.count.mockResolvedValue(0);
+      await service.findAll(director, {
+        type: NotificationType.MEMBER_ACTIVITY,
+      });
+      const where =
+        mockPrisma.notificationRecipient.findMany.mock.calls[0][0].where;
+      expect(where.userId).toBe(director.id);
+      expect(where.notification.AND[1]).toEqual({
+        type: NotificationType.MEMBER_ACTIVITY,
+      });
+    });
+
+    it('does not broaden access when an Admin has no assigned branch', async () => {
+      await expect(
+        service.getUnreadCount({ id: 'admin', role: Role.ADMIN }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.notificationRecipient.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createAnnouncement', () => {
+    const dto = {
+      title: 'Director meeting',
+      message: 'Please attend the monthly meeting.',
+      recipientUserIds: ['11111111-1111-4111-8111-111111111111'],
+    };
+    const admin = {
+      id: 'admin-user',
+      role: Role.ADMIN,
+      admin: { branchId: 'branch-1' },
+    };
+
+    it('creates an unread recipient for a Director in the Admin branch', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: dto.recipientUserIds[0],
+          member: { branchId: 'branch-1' },
+        },
+      ]);
+      mockPrisma.notification.create.mockResolvedValue({
+        id: 'notification-1',
+        title: dto.title,
+        message: dto.message,
+        type: NotificationType.ADMIN_ACTIVITY,
+      });
+      mockPrisma.notificationRecipient.createMany.mockResolvedValue({
+        count: 1,
+      });
+
+      const result = await service.createAnnouncement(dto, admin);
+
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            role: Role.DIRECTOR,
+            member: { is: { branchId: 'branch-1' } },
+          }),
+        }),
+      );
+      expect(mockPrisma.notificationRecipient.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            notificationId: 'notification-1',
+            userId: dto.recipientUserIds[0],
+            status: NotificationStatus.UNREAD,
+          }),
+        ],
+      });
+      expect(result.recipientCount).toBe(1);
+    });
+
+    it('rejects a selected Director outside the Admin branch', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+
+      await expect(service.createAnnouncement(dto, admin)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+    });
   });
 
   // ─── getUnreadCount ────────────────────────────────────────────────────────
@@ -40,19 +189,27 @@ describe('NotificationsService', () => {
   describe('getUnreadCount', () => {
     it('returns 0 when user has no unread notifications', async () => {
       mockPrisma.notificationRecipient.count.mockResolvedValue(0);
-      expect(await service.getUnreadCount('user-1')).toBe(0);
+      expect(
+        await service.getUnreadCount({ id: 'user-1', role: Role.SUPER_ADMIN }),
+      ).toBe(0);
     });
 
     it('returns the correct unread count', async () => {
       mockPrisma.notificationRecipient.count.mockResolvedValue(7);
-      expect(await service.getUnreadCount('user-1')).toBe(7);
+      expect(
+        await service.getUnreadCount({ id: 'user-1', role: Role.SUPER_ADMIN }),
+      ).toBe(7);
     });
 
     it('queries only UNREAD status for the given user', async () => {
       mockPrisma.notificationRecipient.count.mockResolvedValue(0);
-      await service.getUnreadCount('user-42');
+      await service.getUnreadCount({ id: 'user-42', role: Role.SUPER_ADMIN });
       expect(mockPrisma.notificationRecipient.count).toHaveBeenCalledWith({
-        where: { userId: 'user-42', status: NotificationStatus.UNREAD },
+        where: {
+          notification: {},
+          userId: 'user-42',
+          status: NotificationStatus.UNREAD,
+        },
       });
     });
   });
@@ -68,11 +225,14 @@ describe('NotificationsService', () => {
         fakeRecipients,
       );
 
-      const result = await service.findLatest('user-1');
+      const result = await service.findLatest({
+        id: 'user-1',
+        role: Role.SUPER_ADMIN,
+      });
 
       expect(mockPrisma.notificationRecipient.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId: 'user-1' },
+          where: { notification: {}, userId: 'user-1' },
           take: 10,
           orderBy: { createdAt: 'desc' },
         }),
@@ -86,9 +246,9 @@ describe('NotificationsService', () => {
   describe('markRead', () => {
     it('throws NotFoundException when notification is not found for that user', async () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
-      await expect(service.markRead('notif-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.markRead('notif-1', { id: 'user-1', role: Role.SUPER_ADMIN }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('updates status to READ and sets readAt', async () => {
@@ -103,7 +263,10 @@ describe('NotificationsService', () => {
         status: 'READ',
       });
 
-      await service.markRead('notif-1', 'user-1');
+      await service.markRead('notif-1', {
+        id: 'user-1',
+        role: Role.SUPER_ADMIN,
+      });
 
       expect(mockPrisma.notificationRecipient.update).toHaveBeenCalledWith({
         where: { id: 'r1' },
@@ -116,9 +279,15 @@ describe('NotificationsService', () => {
 
     it('looks up recipient by notificationId and userId', async () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
-      await service.markRead('notif-99', 'user-55').catch(() => {});
+      await service
+        .markRead('notif-99', { id: 'user-55', role: Role.SUPER_ADMIN })
+        .catch(() => {});
       expect(mockPrisma.notificationRecipient.findFirst).toHaveBeenCalledWith({
-        where: { notificationId: 'notif-99', userId: 'user-55' },
+        where: {
+          notification: {},
+          notificationId: 'notif-99',
+          userId: 'user-55',
+        },
       });
     });
   });
@@ -130,9 +299,16 @@ describe('NotificationsService', () => {
       mockPrisma.notificationRecipient.updateMany.mockResolvedValue({
         count: 4,
       });
-      const result = await service.markAllRead('user-1');
+      const result = await service.markAllRead({
+        id: 'user-1',
+        role: Role.SUPER_ADMIN,
+      });
       expect(mockPrisma.notificationRecipient.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', status: NotificationStatus.UNREAD },
+        where: {
+          notification: {},
+          userId: 'user-1',
+          status: NotificationStatus.UNREAD,
+        },
         data: expect.objectContaining({
           status: NotificationStatus.READ,
           readAt: expect.any(Date),
@@ -145,7 +321,10 @@ describe('NotificationsService', () => {
       mockPrisma.notificationRecipient.updateMany.mockResolvedValue({
         count: 0,
       });
-      const result = await service.markAllRead('user-1');
+      const result = await service.markAllRead({
+        id: 'user-1',
+        role: Role.SUPER_ADMIN,
+      });
       expect(result).toEqual({ updated: 0 });
     });
   });
@@ -155,9 +334,9 @@ describe('NotificationsService', () => {
   describe('findOne', () => {
     it('throws NotFoundException when notification not found for user', async () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
-      await expect(service.findOne('notif-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.findOne('notif-1', { id: 'user-1', role: Role.SUPER_ADMIN }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('returns the notification recipient with notification details', async () => {
@@ -172,7 +351,10 @@ describe('NotificationsService', () => {
         },
       };
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue(recipient);
-      const result = await service.findOne('n1', 'user-1');
+      const result = await service.findOne('n1', {
+        id: 'user-1',
+        role: Role.SUPER_ADMIN,
+      });
       expect(result).toBe(recipient);
     });
   });

@@ -219,7 +219,7 @@ export class AdminsService {
 
     if (this.notificationsService) {
       try {
-        await this.notificationsService.createNotification({
+        await this.notificationsService.dispatch({
           title: 'Admin Created',
           message: `New admin "${result.fullName}" (${result.adminId}) has been created for branch "${result.branch.name}".`,
           type: 'ADMIN_ACTIVITY',

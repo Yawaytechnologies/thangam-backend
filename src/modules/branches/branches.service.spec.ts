@@ -68,9 +68,9 @@ describe('BranchesService', () => {
       getSignedUrl: jest.fn(),
     };
     const notificationsService = {
-      createNotification: jest.fn<(payload: unknown) => Promise<void>>(),
+      dispatch: jest.fn<(payload: unknown) => Promise<void>>(),
     };
-    notificationsService.createNotification.mockResolvedValue(undefined);
+    notificationsService.dispatch.mockResolvedValue(undefined);
 
     return {
       service: new BranchesService(
@@ -95,7 +95,7 @@ describe('BranchesService', () => {
     const createData = prisma.branch.create.mock.calls[0][0].data;
     expect(createData.admins).toBeUndefined();
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
-    expect(notificationsService.createNotification).toHaveBeenCalledWith(
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ triggeredById: 'super-user-1' }),
     );
   });

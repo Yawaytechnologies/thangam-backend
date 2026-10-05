@@ -1,4 +1,6 @@
+import { ReferralsModule } from './modules/referrals/referrals.module';
 import { Module } from '@nestjs/common';
+import { SmsModule } from './modules/sms/sms.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -19,6 +21,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { TopPerformersModule } from './modules/top-performers/top-performers.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { PdfModule } from './modules/pdf/pdf.module';
+import { DirectorModule } from './modules/director/director.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -33,6 +36,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     PrismaModule,
+    SmsModule,
     AuthModule,
     BranchesModule,
     AdminsModule,
@@ -46,7 +50,9 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     TopPerformersModule,
     DocumentsModule,
     PdfModule,
+    DirectorModule,
     HealthModule,
+    ReferralsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

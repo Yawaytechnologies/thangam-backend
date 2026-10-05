@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { DocumentType, Role, UserStatus } from '@prisma/client';
@@ -12,13 +13,82 @@ import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { MemberFilterDto } from './dto/member-filter.dto';
 import { generateMemberId } from '../../common/utils/id-generator.util';
+import { NotificationsService } from '../notifications/notifications.service';
+import { getDescendantMemberIds } from '../../common/utils/member-hierarchy.util';
 
 @Injectable()
 export class MembersService {
+  private readonly logger = new Logger(MembersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async findAncestorDirector(memberId: string) {
+    const visited = new Set<string>();
+    let currentId: string | null = memberId;
+
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const member = await this.prisma.member.findUnique({
+        where: { id: currentId },
+        select: {
+          id: true,
+          userId: true,
+          fullName: true,
+          role: true,
+          reportsToId: true,
+        },
+      });
+      if (!member) return null;
+      if (member.role === Role.DIRECTOR) return member;
+      currentId = member.reportsToId;
+    }
+
+    return null;
+  }
+
+  private async notifyDirectorOfNewMember(member: {
+    id: string;
+    memberId: string;
+    fullName: string;
+    role: Role;
+    branchId: string;
+    reportsToId: string | null;
+  }) {
+    const director = await this.findAncestorDirector(member.id);
+
+    const roleLabel = member.role
+      .toLowerCase()
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    const reportingMember = member.reportsToId
+      ? await this.prisma.member.findUnique({
+          where: { id: member.reportsToId },
+          select: { fullName: true },
+        })
+      : null;
+    const isDirectorAccount = member.role === Role.DIRECTOR;
+
+    await this.notificationsService.dispatch({
+      title: isDirectorAccount
+        ? 'Director Account Created'
+        : `New ${roleLabel} Added`,
+      message: isDirectorAccount
+        ? `Welcome ${member.fullName}. Your Director account (${member.memberId}) has been created.`
+        : `${member.fullName} (${member.memberId}) was added${
+            reportingMember ? ` under ${reportingMember.fullName}` : ''
+          } in your reporting hierarchy.`,
+      type: isDirectorAccount ? 'SYSTEM_ACTIVITY' : 'TEAM_ACTIVITY',
+      branchId: member.branchId,
+      relatedModule: 'MEMBER',
+      relatedEntityId: member.id,
+      recipientUserIds: director ? [director.userId] : [],
+    });
+  }
 
   private async getProfilePhotoUrlMap(
     memberIds: string[],
@@ -166,9 +236,11 @@ export class MembersService {
         // Agent sees only themselves
         where.id = user.member?.id;
       } else {
-        const downlineRoles = this.getDownlineRoles(memberRole);
-        where.role = { in: downlineRoles };
-        where.branchId = user.member?.branchId;
+        where.id = {
+          in: user.member?.id
+            ? await getDescendantMemberIds(this.prisma, user.member.id)
+            : [],
+        };
       }
     }
 
@@ -364,12 +436,22 @@ export class MembersService {
       return newMember;
     });
 
+    try {
+      await this.notifyDirectorOfNewMember(member);
+    } catch (error) {
+      this.logger.error(
+        `Member ${member.memberId} was created, but the Director notification failed`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+
     return member;
   }
 
   // ─── findOne ──────────────────────────────────────────────────────────────
 
-  async findOne(id: string, _user: unknown) {
+  async findOne(id: string, user: any) {
+    await this.assertMemberVisible(id, user);
     const member = await this.prisma.member.findUnique({
       where: { id },
       include: {
@@ -617,45 +699,24 @@ export class MembersService {
   // ─── getTeamForMobile ─────────────────────────────────────────────────────
 
   async getTeamForMobile(user: any, filters: MemberFilterDto) {
-    const { role, status, page = 1, limit = 20 } = filters;
+    const { search, role, status, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
 
     const memberRole: Role = user.member?.role;
-    if (!memberRole) {
+    if (!memberRole || !user.member?.id || memberRole === Role.AGENT) {
       return { data: [], total: 0, page, limit };
     }
 
-    if (memberRole === Role.AGENT) {
-      const self = await this.prisma.member.findUnique({
-        where: { id: user.member.id },
-        include: {
-          user: {
-            select: { id: true, status: true, role: true },
-          },
-          branch: true,
-        },
-      });
-      return {
-        data: self ? await this.attachProfilePhotoUrls([self]) : [],
-        total: self ? 1 : 0,
-        page,
-        limit,
-      };
-    }
-
-    const downlineRoles = this.getDownlineRoles(memberRole);
+    const ids = await getDescendantMemberIds(this.prisma, user.member.id);
     const where: any = {
-      role: { in: downlineRoles },
-      branchId: user.member?.branchId,
+      id: { in: ids },
     };
 
-    if (role) {
-      if (downlineRoles.includes(role)) {
-        where.role = role;
-      } else {
-        return { data: [], total: 0, page, limit };
-      }
-    }
+    if (role) where.role = role;
+    if (search)
+      where.OR = ['fullName', 'memberId', 'phone', 'codeNumber'].map(
+        (field) => ({ [field]: { contains: search, mode: 'insensitive' } }),
+      );
 
     if (status) where.status = status;
 
@@ -688,7 +749,29 @@ export class MembersService {
 
   // ─── getMemberBottomSheet ─────────────────────────────────────────────────
 
-  async getMemberBottomSheet(memberId: string) {
+  private async assertMemberVisible(memberId: string, user: any) {
+    if (user.role === Role.SUPER_ADMIN) return;
+    if (user.role === Role.ADMIN && user.admin?.branchId) {
+      const exists = await this.prisma.member.findFirst({
+        where: { id: memberId, branchId: user.admin.branchId },
+        select: { id: true },
+      });
+      if (exists) return;
+    } else if (user.member?.id) {
+      if (memberId === user.member.id) return;
+      if (
+        user.member.role !== Role.AGENT &&
+        (await getDescendantMemberIds(this.prisma, user.member.id)).includes(
+          memberId,
+        )
+      )
+        return;
+    }
+    throw new NotFoundException('Member not found');
+  }
+
+  async getMemberBottomSheet(memberId: string, user: any) {
+    await this.assertMemberVisible(memberId, user);
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
       select: {
@@ -699,6 +782,10 @@ export class MembersService {
         phone: true,
         status: true,
         createdAt: true,
+        email: true,
+        codeNumber: true,
+        reportsToId: true,
+        reportsTo: { select: { id: true, fullName: true, role: true } },
         branch: {
           select: { id: true, name: true },
         },
@@ -726,6 +813,12 @@ export class MembersService {
     }
 
     return {
+      id: member.id,
+      email: member.email,
+      codeNumber: member.codeNumber,
+      reportsToId: member.reportsToId,
+      reportsTo: member.reportsTo,
+      branch: member.branch,
       profilePhotoUrl,
       fullName: member.fullName,
       role: member.role,

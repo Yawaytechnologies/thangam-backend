@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import {
   BookingStatus,
   BillingStatus,
@@ -7,6 +7,7 @@ import {
   WorkflowStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getDescendantMemberIds } from '../../common/utils/member-hierarchy.util';
 
 @Injectable()
 export class DashboardService {
@@ -210,8 +211,21 @@ export class DashboardService {
 
   // ─── User / Mobile ────────────────────────────────────────────────────────
 
-  async getUserDashboard(userId: string, memberRole: string, branchId: string) {
-    const downlineRoles = this.getDownlineRoles(memberRole as Role);
+  async getUserDashboard(
+    userId: string,
+    memberRole: string,
+    _branchId: string,
+  ) {
+    const member = await this.prisma.member.findUnique({
+      where: { userId },
+      select: { id: true, role: true },
+    });
+    if (!member)
+      throw new ForbiddenException('Member profile is not available');
+    const ids =
+      member.role === Role.AGENT
+        ? []
+        : await getDescendantMemberIds(this.prisma, member.id);
 
     const [
       totalNetwork,
@@ -221,15 +235,13 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.member.count({
         where: {
-          branchId,
-          role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
+          id: { in: ids },
         },
       }),
       this.prisma.member.count({
         where: {
-          branchId,
+          id: { in: ids },
           status: UserStatus.ACTIVE,
-          role: downlineRoles.length > 0 ? { in: downlineRoles } : undefined,
         },
       }),
       this.prisma.property.count({
@@ -251,6 +263,41 @@ export class DashboardService {
       availableProperties,
       unreadNotifications,
     };
+  }
+
+  async getUserHierarchy(userId: string) {
+    const select = {
+      id: true,
+      memberId: true,
+      fullName: true,
+      phone: true,
+      email: true,
+      role: true,
+      status: true,
+      branchId: true,
+      reportsToId: true,
+      createdAt: true,
+      branch: { select: { id: true, name: true } },
+      reportsTo: { select: { id: true, fullName: true, role: true } },
+    } as const;
+    const member = await this.prisma.member.findUnique({
+      where: { userId },
+      select,
+    });
+    if (!member)
+      throw new ForbiddenException('Member profile is not available');
+    const ids =
+      member.role === Role.AGENT
+        ? []
+        : await getDescendantMemberIds(this.prisma, member.id);
+    const members = ids.length
+      ? await this.prisma.member.findMany({
+          where: { id: { in: ids } },
+          select,
+          orderBy: { fullName: 'asc' },
+        })
+      : [];
+    return { member, members };
   }
 
   async getUserAlerts(memberId: string) {

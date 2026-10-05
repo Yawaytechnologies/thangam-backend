@@ -1,4 +1,9 @@
 import {
+  assertPropertyAccess,
+  type PropertyViewer,
+} from '../../common/utils/property-access';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
   Body,
   Controller,
   Get,
@@ -19,8 +24,10 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DocumentsService } from './documents.service';
 
@@ -29,7 +36,10 @@ import { DocumentsService } from './documents.service';
 @UseGuards(JwtAuthGuard)
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -58,19 +68,21 @@ export class DocumentsController {
       },
     },
   })
-  upload(
+  async upload(
     @UploadedFile() file: Express.Multer.File,
     @Body('entityType') entityType: string,
     @Body('entityId') entityId: string,
     @Body('documentType') documentType: DocumentType,
-    @CurrentUser('id') uploadedBy: string,
+    @CurrentUser() user: PropertyViewer,
   ) {
+    if (entityType === 'property')
+      await assertPropertyAccess(this.prisma, entityId, user);
     return this.documentsService.upload(
       file,
       entityType,
       entityId,
       documentType,
-      uploadedBy,
+      user.id,
     );
   }
 
@@ -102,6 +114,36 @@ export class DocumentsController {
     return this.documentsService.uploadBookingImages(
       bookingId,
       files ?? [],
+      uploadedBy,
+    );
+  }
+
+  @Post('bookings/:bookingId/signature')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @UseGuards(RolesGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload an applicant signature (PNG/JPEG, max 2 MB)',
+  })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  uploadBookingSignature(
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser('id') uploadedBy: string,
+  ) {
+    return this.documentsService.uploadBookingSignature(
+      bookingId,
+      file,
       uploadedBy,
     );
   }
@@ -141,8 +183,11 @@ export class DocumentsController {
   @Get(':id/url')
   @ApiOperation({ summary: 'Get a 1-hour signed URL for a document' })
   @ApiParam({ name: 'id', description: 'Document UUID' })
-  async getSignedUrl(@Param('id') id: string) {
-    const result = await this.documentsService.getDocumentWithUrl(id);
+  async getSignedUrl(
+    @Param('id') id: string,
+    @CurrentUser() user: PropertyViewer,
+  ) {
+    const result = await this.documentsService.getDocumentWithUrl(id, user);
     return { signedUrl: result.signedUrl };
   }
 
@@ -156,7 +201,12 @@ export class DocumentsController {
   getDocumentsForEntity(
     @Param('entityType') entityType: string,
     @Param('entityId') entityId: string,
+    @CurrentUser() user: PropertyViewer,
   ) {
-    return this.documentsService.getDocumentsForEntity(entityType, entityId);
+    return this.documentsService.getDocumentsForEntity(
+      entityType,
+      entityId,
+      user,
+    );
   }
 }

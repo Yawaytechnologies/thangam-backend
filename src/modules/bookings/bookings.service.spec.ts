@@ -19,6 +19,8 @@ const mockPrisma = {
     update: jest.fn(),
   },
   property: { findUnique: jest.fn(), update: jest.fn() },
+  customerReferral: { findFirst: jest.fn(), updateMany: jest.fn() },
+  customerReferralActivity: { create: jest.fn() },
   workflowHistory: { create: jest.fn() },
   $transaction: mockTransaction,
 };
@@ -206,6 +208,100 @@ describe('BookingsService', () => {
           }),
         }),
       );
+    });
+
+    it('creates from the existing booking flow and completes the assigned referral atomically', async () => {
+      const createdBooking = {
+        id: 'booking-1',
+        bookingId: 'STH-BK-0001',
+        applicantName: 'Approved Customer',
+      };
+      const referral = {
+        id: 'referral-1',
+        branchId: 'branch-1',
+        currentReviewerId: 'admin-1',
+        status: 'WITH_ADMIN',
+        bookingId: null,
+        version: 2,
+        propertyId: 'prop-1',
+        customerName: 'Approved Customer',
+        customerPhone: '9876543210',
+      };
+      const tx = {
+        customerReferral: {
+          findFirst: jest.fn().mockResolvedValue(referral),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        customerReferralActivity: { create: jest.fn() },
+        property: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'prop-1',
+            branchId: 'branch-1',
+            workflowStatus: 'AVAILABLE',
+          }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        booking: {
+          count: jest.fn().mockResolvedValue(0),
+          create: jest.fn().mockResolvedValue(createdBooking),
+          findUnique: jest.fn().mockResolvedValue(createdBooking),
+        },
+        bookingPayment: { createMany: jest.fn() },
+        bookingDenomination: { createMany: jest.fn() },
+        workflowHistory: { create: jest.fn() },
+      };
+      mockTransaction.mockImplementation(async (callback: any) => callback(tx));
+      const bookingUser = {
+        ...adminUser,
+        admin: {
+          id: 'admin-1',
+          branchId: 'branch-1',
+          fullName: 'Branch Admin',
+        },
+      };
+
+      await service.create(
+        {
+          ...dto,
+          applicantName: 'Tampered name',
+          cellNumber: '9000000000',
+          referralId: 'referral-1',
+          referralVersion: 2,
+          referralNotes: 'Availability confirmed',
+        } as any,
+        bookingUser,
+      );
+
+      expect(tx.booking.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            applicantName: 'Approved Customer',
+            cellNumber: '9876543210',
+          }),
+        }),
+      );
+      expect(tx.customerReferral.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'referral-1',
+          branchId: 'branch-1',
+          currentReviewerId: 'admin-1',
+          status: 'WITH_ADMIN',
+          version: 2,
+          bookingId: null,
+        },
+        data: {
+          bookingId: 'booking-1',
+          status: 'BOOKED',
+          version: { increment: 1 },
+        },
+      });
+      expect(tx.customerReferralActivity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          referralId: 'referral-1',
+          action: 'BOOKING_CREATED',
+          notes: 'Availability confirmed',
+        }),
+      });
     });
 
     it('does not persist signatureUrl from booking payloads', async () => {

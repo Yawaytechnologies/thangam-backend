@@ -12,6 +12,11 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingStatus, PaymentMethod } from '@prisma/client';
 
 export class BillingFilterDto {
+  @ApiPropertyOptional({ description: 'Filter by booking UUID' })
+  @IsUUID()
+  @IsOptional()
+  bookingId?: string;
+
   @ApiPropertyOptional({
     description:
       'Search by billingId, bookingId, buyerName, projectName, plotNumber',

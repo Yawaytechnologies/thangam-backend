@@ -1,3 +1,10 @@
+function normalizeSupabaseUrl(value: string): string {
+  return value
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, '')
+    .replace(/\/+$/, '');
+}
+
 export default () => ({
   port: parseInt(process.env.PORT || '3001', 10),
   database: { url: process.env.DATABASE_URL },
@@ -11,7 +18,7 @@ export default () => ({
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
   supabase: {
-    url: process.env.SUPABASE_URL || '',
+    url: normalizeSupabaseUrl(process.env.SUPABASE_URL || ''),
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     bucket: process.env.SUPABASE_STORAGE_BUCKET || 'sth-files',
   },

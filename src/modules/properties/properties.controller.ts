@@ -1,4 +1,9 @@
 import {
+  assertPropertyAccess,
+  type PropertyViewer,
+} from '../../common/utils/property-access';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
   Body,
   Controller,
   Get,
@@ -36,15 +41,21 @@ import { PropertyFilterDto } from './dto/property-filter.dto';
 @ApiBearerAuth()
 @Controller('properties')
 export class PropertiesController {
-  constructor(private readonly propertiesService: PropertiesService) {}
+  constructor(
+    private readonly propertiesService: PropertiesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get()
   @ApiOperation({
     summary: 'Get all properties with optional filters and pagination',
   })
-  findAll(@Query() filters: PropertyFilterDto) {
-    return this.propertiesService.findAll(filters);
+  findAll(
+    @Query() filters: PropertyFilterDto,
+    @CurrentUser() user: PropertyViewer,
+  ) {
+    return this.propertiesService.findAll(filters, user);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -59,7 +70,11 @@ export class PropertiesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single property by ID with full details' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PropertyViewer,
+  ) {
+    await assertPropertyAccess(this.prisma, id, user);
     return this.propertiesService.findOne(id);
   }
 
@@ -67,7 +82,11 @@ export class PropertiesController {
   @Get(':id/workflow')
   @ApiOperation({ summary: 'Get workflow history for a property' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  getWorkflow(@Param('id', ParseUUIDPipe) id: string) {
+  async getWorkflow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PropertyViewer,
+  ) {
+    await assertPropertyAccess(this.prisma, id, user);
     return this.propertiesService.getWorkflow(id);
   }
 
@@ -75,7 +94,11 @@ export class PropertiesController {
   @Get(':id/documents')
   @ApiOperation({ summary: 'Get documents for a property' })
   @ApiParam({ name: 'id', description: 'Property UUID' })
-  getDocuments(@Param('id', ParseUUIDPipe) id: string) {
+  async getDocuments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PropertyViewer,
+  ) {
+    await assertPropertyAccess(this.prisma, id, user);
     return this.propertiesService.getDocuments(id);
   }
 
@@ -124,12 +147,13 @@ export class PropertiesController {
       },
     },
   })
-  uploadImages(
+  async uploadImages(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFiles() files: Express.Multer.File[],
-    @CurrentUser('id') uploadedBy: string,
+    @CurrentUser() user: PropertyViewer,
   ) {
-    return this.propertiesService.uploadImages(id, files ?? [], uploadedBy);
+    await assertPropertyAccess(this.prisma, id, user);
+    return this.propertiesService.uploadImages(id, files ?? [], user.id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -161,17 +185,18 @@ export class PropertiesController {
       },
     },
   })
-  uploadDocuments(
+  async uploadDocuments(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFiles() files: Express.Multer.File[],
     @Body('documentType') documentType: DocumentType,
-    @CurrentUser('id') uploadedBy: string,
+    @CurrentUser() user: PropertyViewer,
   ) {
+    await assertPropertyAccess(this.prisma, id, user);
     return this.propertiesService.uploadDocuments(
       id,
       files ?? [],
       documentType,
-      uploadedBy,
+      user.id,
     );
   }
 }
