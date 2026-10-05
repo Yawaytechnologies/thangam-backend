@@ -88,50 +88,6 @@ export class DocumentsService {
     }
   }
 
-  private async ensureStorageBucket(): Promise<void> {
-    if (!this.bucketReady) {
-      this.bucketReady = this.initializeStorageBucket().catch((error) => {
-        this.bucketReady = undefined;
-        throw error;
-      });
-    }
-    return this.bucketReady;
-  }
-
-  private async initializeStorageBucket(): Promise<void> {
-    const { data, error } = await this.supabase.storage.getBucket(this.bucket);
-    if (data && !error) return;
-
-    const isMissing =
-      error?.message?.toLowerCase().includes('not found') ||
-      String((error as { statusCode?: string | number } | null)?.statusCode) ===
-        '404';
-
-    if (!isMissing) {
-      throw new BadRequestException(
-        `Unable to access storage bucket "${this.bucket}": ${error?.message ?? 'Unknown error'}`,
-      );
-    }
-
-    const { error: createError } = await this.supabase.storage.createBucket(
-      this.bucket,
-      {
-        public: false,
-        fileSizeLimit: this.maxImageBytes,
-        allowedMimeTypes: this.allowedImageMimeTypes,
-      },
-    );
-
-    if (
-      createError &&
-      !createError.message.toLowerCase().includes('already exists')
-    ) {
-      throw new BadRequestException(
-        `Unable to create storage bucket "${this.bucket}": ${createError.message}. Verify SUPABASE_SERVICE_ROLE_KEY belongs to the configured project.`,
-      );
-    }
-  }
-
   async upload(
     file: Express.Multer.File,
     entityType: string,
@@ -143,7 +99,6 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
-    await this.ensureStorageBucket();
     const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
 
     let uploadError: Error | null = null;
