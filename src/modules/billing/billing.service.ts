@@ -24,7 +24,40 @@ export class BillingService {
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
     @Optional() private readonly smsService?: SmsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  private async notifyBillingActivity(payload: {
+    title: string;
+    message: string;
+    triggeredById?: string;
+    branchId?: string | null;
+    bookingId?: string;
+    billingId?: string;
+    relatedEntityId?: string;
+  }) {
+    if (!this.notificationsService) return;
+    try {
+      await this.notificationsService.createNotification({
+        ...payload,
+        branchId: payload.branchId ?? undefined,
+        type: 'BILLING_ACTIVITY',
+        relatedModule: 'Billing',
+      });
+    } catch {
+      /* A notification failure must not repeat a committed payment. */
+    }
+  }
+  private async sendCustomerBillingMessage(
+    payload: Parameters<NotificationsService['sendBillingCustomerMessage']>[0],
+  ) {
+    if (!this.notificationsService) return;
+    try {
+      await this.notificationsService.sendBillingCustomerMessage(payload);
+    } catch {
+      /* Payment is already committed. */
+    }
+  }
 
   async findAll(user: any, filters: BillingFilterDto) {
     const page = filters.page ?? 1;
@@ -119,7 +152,7 @@ export class BillingService {
   }
 
   async create(dto: CreateBillingDto, user: any) {
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const billingStatus = dto.status ?? BillingStatus.PENDING;
       // 1. Find booking
       const booking = await tx.booking.findUnique({
@@ -308,7 +341,7 @@ export class BillingService {
       amountInWords = numberToWords(dto.amountInNumbers);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.billing.update({
         where: { id },
         data: {
