@@ -40,7 +40,37 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
     @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional() private readonly smsService?: SmsService,
   ) {}
+
+  private validateCashDenominations(dto: CreateBookingDto | UpdateBookingDto) {
+    const cash =
+      dto.payments?.filter(
+        (payment) => payment.paymentMethod === PaymentMethod.CASH,
+      ) ?? [];
+    if (!dto.denominations?.length) return;
+    if (!cash.length)
+      throw new BadRequestException(
+        'Cash denominations require a cash payment',
+      );
+    const seen = new Set<number>();
+    const total = dto.denominations.reduce((sum, row) => {
+      if (
+        ![10, 20, 50, 100, 200, 500].includes(row.denomination) ||
+        !Number.isInteger(row.count) ||
+        row.count <= 0 ||
+        seen.has(row.denomination) ||
+        row.amount !== row.denomination * row.count
+      )
+        throw new BadRequestException('Invalid cash denomination details');
+      seen.add(row.denomination);
+      return sum + row.amount;
+    }, 0);
+    if (total !== cash.reduce((sum, payment) => sum + payment.totalAmount, 0))
+      throw new BadRequestException(
+        'Cash denominations must equal the cash payment total',
+      );
+  }
 
   private async notifyBookingActivity(payload: {
     title: string;
@@ -194,7 +224,7 @@ export class BookingsService {
       branchId = dto.branchId;
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       let referral: Awaited<ReturnType<typeof tx.customerReferral.findFirst>> =
         null;
       if (dto.referralId) {

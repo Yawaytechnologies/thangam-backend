@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -14,7 +15,7 @@ import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { MemberFilterDto } from './dto/member-filter.dto';
 import { generateMemberId } from '../../common/utils/id-generator.util';
-import { NotificationsService } from '../notifications/notifications.service';
+
 import { getDescendantMemberIds } from '../../common/utils/member-hierarchy.util';
 
 @Injectable()

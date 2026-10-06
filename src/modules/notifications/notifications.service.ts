@@ -1,10 +1,14 @@
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import {
   Injectable,
+  BadRequestException,
+  ForbiddenException,
   Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
 import {
+  Prisma,
   MessageType,
   NotificationType,
   NotificationStatus,
@@ -73,6 +77,29 @@ export class NotificationsService {
     emitToUser(userId: string, event: string, data: any): void;
   }): void {
     this.gateway = gateway;
+  }
+
+  private visibility(user: NotificationViewer): Prisma.NotificationWhereInput {
+    if (user.role === Role.SUPER_ADMIN) return {};
+    const branchId =
+      user.role === Role.ADMIN ? user.admin?.branchId : user.member?.branchId;
+    if (!branchId)
+      throw new ForbiddenException('Your account has no assigned branch');
+    return {
+      OR: [{ branchId }, { branchId: null }],
+      ...(user.role === Role.DIRECTOR
+        ? {
+            type: {
+              in: [
+                NotificationType.ADMIN_ACTIVITY,
+                NotificationType.MEMBER_ACTIVITY,
+                NotificationType.SYSTEM_ACTIVITY,
+                NotificationType.TEAM_ACTIVITY,
+              ],
+            },
+          }
+        : {}),
+    };
   }
 
   private resolvePriority(
@@ -173,16 +200,6 @@ export class NotificationsService {
         })),
         skipDuplicates: true,
       });
-
-      if (this.gateway) {
-        const payload = {
-          ...notification,
-          status: NotificationStatus.UNREAD,
-        };
-        dto.recipientUserIds.forEach((userId) =>
-          this.gateway!.emitToUser(userId, 'notification:new', payload),
-        );
-      }
     }
 
     this.emitNotification(notification, recipientUserIds);
@@ -345,52 +362,7 @@ export class NotificationsService {
 
   // ─── findAll ──────────────────────────────────────────────────────────────
 
-  private notificationScopeForUser(user: any, branchId?: string) {
-    if (user.role === Role.SUPER_ADMIN) {
-      return branchId ? { branchId } : {};
-    }
-
-    if (user.role === Role.ADMIN) {
-      return { branchId: user.admin?.branchId ?? '__missing_branch__' };
-    }
-
-    if (user.member?.role === Role.DIRECTOR) {
-      return { branchId: user.member?.branchId ?? '__missing_branch__' };
-    }
-
-    return {};
-  }
-
-  private async ensureRecipientLinksForUser(user: any) {
-    if (typeof user === 'string' || !user?.id) return;
-
-    const notificationScope = this.notificationScopeForUser(user);
-    const notifications = await this.prisma.notification.findMany({
-      where: {
-        ...notificationScope,
-        recipients: {
-          none: { userId: user.id },
-        },
-      },
-      select: { id: true },
-      take: 500,
-    });
-
-    if (notifications.length === 0) return;
-
-    await this.prisma.notificationRecipient.createMany({
-      data: notifications.map((notification) => ({
-        notificationId: notification.id,
-        userId: user.id,
-        status: NotificationStatus.UNREAD,
-      })),
-      skipDuplicates: true,
-    });
-  }
-
   async findAll(user: any, filters: NotificationFilterDto) {
-    await this.ensureRecipientLinksForUser(user);
-
     const {
       search,
       type,
@@ -420,10 +392,7 @@ export class NotificationsService {
       ];
     }
 
-    Object.assign(
-      notificationWhere,
-      this.notificationScopeForUser(user, branchId),
-    );
+    if (branchId) notificationWhere.branchId = branchId;
 
     // Build recipient where clause
     const recipientWhere: any = {
@@ -459,9 +428,6 @@ export class NotificationsService {
   // ─── findLatest ───────────────────────────────────────────────────────────
 
   async findLatest(user: any) {
-    await this.ensureRecipientLinksForUser(user);
-    const userId = typeof user === 'string' ? user : user.id;
-
     return this.prisma.notificationRecipient.findMany({
       where: { userId: user.id, notification: this.visibility(user) },
       orderBy: { createdAt: 'desc' },
@@ -479,9 +445,6 @@ export class NotificationsService {
   // ─── getUnreadCount ───────────────────────────────────────────────────────
 
   async getUnreadCount(user: any): Promise<number> {
-    await this.ensureRecipientLinksForUser(user);
-    const userId = typeof user === 'string' ? user : user.id;
-
     return this.prisma.notificationRecipient.count({
       where: {
         userId: user.id,
@@ -696,7 +659,7 @@ export class NotificationsService {
       },
     });
 
-    await this.sendCustomerSms(payload.customerMobile, smsText);
+    // Delivery is queued transactionally by the booking/billing service.
 
     return notificationMessage;
   }
@@ -732,7 +695,7 @@ export class NotificationsService {
       },
     });
 
-    await this.sendCustomerSms(payload.customerMobile, smsText);
+    // Delivery is queued transactionally by the booking/billing service.
 
     return notificationMessage;
   }
