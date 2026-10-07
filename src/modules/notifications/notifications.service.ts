@@ -80,13 +80,35 @@ export class NotificationsService {
   }
 
   private visibility(user: NotificationViewer): Prisma.NotificationWhereInput {
-    if (user.role === Role.SUPER_ADMIN) return {};
+    if (user.role === Role.SUPER_ADMIN)
+      return {
+        type: {
+          in: [
+            NotificationType.PROPERTY_ACTIVITY,
+            NotificationType.BOOKING_ACTIVITY,
+            NotificationType.BILLING_ACTIVITY,
+          ],
+        },
+        triggeredById: { not: user.id },
+        triggeredBy: { is: { role: Role.ADMIN } },
+      };
     const branchId =
       user.role === Role.ADMIN ? user.admin?.branchId : user.member?.branchId;
     if (!branchId)
       throw new ForbiddenException('Your account has no assigned branch');
+
+    const senderScope =
+      user.role === Role.ADMIN
+        ? {
+            triggeredBy: {
+              is: { role: Role.SUPER_ADMIN },
+            },
+          }
+        : {};
+
     return {
       OR: [{ branchId }, { branchId: null }],
+      ...senderScope,
       ...(user.role === Role.DIRECTOR
         ? {
             type: {
@@ -258,7 +280,26 @@ export class NotificationsService {
       where: { role: Role.SUPER_ADMIN, status: 'ACTIVE' },
       select: { id: true },
     });
-    superAdmins.forEach((u) => recipientUserIds.add(u.id));
+    const actor = payload.triggeredById
+      ? await this.prisma.user.findUnique({
+          where: { id: payload.triggeredById },
+          select: { role: true },
+        })
+      : null;
+    const notifySuperAdmins =
+      actor?.role === Role.ADMIN &&
+      (
+        [
+          NotificationType.PROPERTY_ACTIVITY,
+          NotificationType.BOOKING_ACTIVITY,
+          NotificationType.BILLING_ACTIVITY,
+        ] as NotificationType[]
+      ).includes(payload.type);
+    superAdmins.forEach((u) => {
+      if (notifySuperAdmins && u.id !== payload.triggeredById)
+        recipientUserIds.add(u.id);
+      else recipientUserIds.delete(u.id);
+    });
 
     // If branchId provided: include ADMIN users of that branch
     if (payload.branchId) {
@@ -484,6 +525,18 @@ export class NotificationsService {
 
   // ─── markRead ─────────────────────────────────────────────────────────────
 
+  async remove(recipientId: string, user: NotificationViewer) {
+    const result = await this.prisma.notificationRecipient.deleteMany({
+      where: {
+        id: recipientId,
+        userId: user.id,
+        notification: this.visibility(user),
+      },
+    });
+    if (!result.count) throw new NotFoundException('Notification not found');
+    return { deleted: true };
+  }
+
   async markRead(notificationId: string, user: NotificationViewer) {
     const recipient = await this.prisma.notificationRecipient.findFirst({
       where: {
@@ -507,6 +560,27 @@ export class NotificationsService {
   }
 
   // ─── markAllRead ──────────────────────────────────────────────────────────
+
+  async deleteForUser(notificationId: string, user: NotificationViewer) {
+    const recipient = await this.prisma.notificationRecipient.findFirst({
+      where: {
+        notificationId,
+        userId: user.id,
+        notification: this.visibility(user),
+      },
+      select: { id: true },
+    });
+
+    if (!recipient) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    await this.prisma.notificationRecipient.delete({
+      where: { id: recipient.id },
+    });
+
+    return { deleted: true };
+  }
 
   async markAllRead(user: NotificationViewer) {
     const result = await this.prisma.notificationRecipient.updateMany({

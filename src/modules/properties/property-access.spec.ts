@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import {
   propertyBranch,
   assertPropertyAccess,
+  assertPropertyReadAccess,
   PropertyViewer,
 } from '../../common/utils/property-access';
 import { PropertiesService } from './properties.service';
@@ -36,19 +37,27 @@ describe('Property branch access', () => {
       propertyBranch({ id: 'member', role, member: { branchId: 'branch-a' } }),
     ).toBe('branch-a');
   });
-  it('rejects accounts without an assigned branch', async () => {
-    await expect(
-      service.findAll({}, { id: 'missing', role: Role.ADMIN }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.property.findMany).not.toHaveBeenCalled();
+  it('allows admin property browsing without branch scoping', async () => {
+    await service.findAll({}, admin);
+    for (const query of [prisma.property.count, prisma.property.findMany]) {
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    }
   });
-  it('overrides a forged branch filter and scopes totals and records', async () => {
+  it('allows admin property browsing with an explicit branch filter', async () => {
     await service.findAll({ branchId: 'branch-b' }, admin);
     for (const query of [prisma.property.count, prisma.property.findMany]) {
       expect(query).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { branchId: 'branch-a' } }),
+        expect.objectContaining({ where: { branchId: 'branch-b' } }),
       );
     }
+  });
+  it('rejects member accounts without an assigned branch', async () => {
+    await expect(
+      service.findAll({}, { id: 'missing', role: Role.AGENT }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.property.findMany).not.toHaveBeenCalled();
   });
   it('lets superadmin list all branches or filter a branch', async () => {
     await service.findAll({}, superadmin);
@@ -68,18 +77,27 @@ describe('Property branch access', () => {
       select: { id: true },
     });
   });
+  it('allows admins to read property details across branches', async () => {
+    prisma.property.findFirst.mockResolvedValue({ id: 'property-b' });
+    await expect(
+      assertPropertyReadAccess(prisma as any, 'property-b', admin),
+    ).resolves.toBeUndefined();
+    expect(prisma.property.findFirst).toHaveBeenCalledWith({
+      where: { id: 'property-b' },
+      select: { id: true },
+    });
+  });
   it.each(['findOne', 'getWorkflow', 'getDocuments'] as const)(
-    'blocks cross-branch %s before returning data',
+    'allows admin read %s before returning data',
     async (method) => {
+      prisma.property.findFirst.mockResolvedValue({ id: 'property-b' });
       const handler = { [method]: jest.fn() };
       const controller = new PropertiesController(
         handler as any,
         prisma as any,
       );
-      await expect(
-        controller[method]('property-b', admin),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(handler[method]).not.toHaveBeenCalled();
+      await controller[method]('property-b', admin);
+      expect(handler[method]).toHaveBeenCalledWith('property-b');
     },
   );
 });

@@ -483,8 +483,12 @@ export class BillingService {
       throw new ServiceUnavailableException('PDF service is not available');
     }
 
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
     const billing = await this.prisma.billing.findUnique({
-      where: { id },
+      where: isUuid ? { id } : { billingId: id },
       include: {
         booking: {
           include: {

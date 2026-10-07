@@ -1,5 +1,5 @@
 import {
-  propertyBranch,
+  propertyReadBranch,
   PropertyViewer,
 } from '../../common/utils/property-access';
 import {
@@ -82,7 +82,7 @@ export class PropertiesService {
   }
 
   async findAll(filters: PropertyFilterDto, user: PropertyViewer) {
-    const branchId = propertyBranch(user) ?? filters.branchId;
+    const branchId = propertyReadBranch(user) ?? filters.branchId;
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const skip = (page - 1) * limit;
