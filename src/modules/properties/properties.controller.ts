@@ -1,5 +1,6 @@
 import {
   assertPropertyAccess,
+  assertPropertyReadAccess,
   type PropertyViewer,
 } from '../../common/utils/property-access';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -74,7 +75,7 @@ export class PropertiesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: PropertyViewer,
   ) {
-    await assertPropertyAccess(this.prisma, id, user);
+    await assertPropertyReadAccess(this.prisma, id, user);
     return this.propertiesService.findOne(id);
   }
 
@@ -86,7 +87,7 @@ export class PropertiesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: PropertyViewer,
   ) {
-    await assertPropertyAccess(this.prisma, id, user);
+    await assertPropertyReadAccess(this.prisma, id, user);
     return this.propertiesService.getWorkflow(id);
   }
 
@@ -98,7 +99,7 @@ export class PropertiesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: PropertyViewer,
   ) {
-    await assertPropertyAccess(this.prisma, id, user);
+    await assertPropertyReadAccess(this.prisma, id, user);
     return this.propertiesService.getDocuments(id);
   }
 

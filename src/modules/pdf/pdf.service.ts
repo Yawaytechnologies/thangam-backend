@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { existsSync } from 'node:fs';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import {
   buildBookingFormHtml,
@@ -13,13 +14,34 @@ import {
 export class PdfService {
   private readonly logger = new Logger(PdfService.name);
 
+  private getExecutablePath() {
+    const candidates = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      process.platform === 'win32'
+        ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+        : '',
+      process.platform === 'win32'
+        ? 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+        : '',
+      process.platform === 'linux' ? '/usr/bin/chromium-browser' : '',
+      process.platform === 'linux' ? '/usr/bin/chromium' : '',
+      process.platform === 'linux' ? '/usr/bin/google-chrome' : '',
+      process.platform === 'linux' ? '/usr/bin/google-chrome-stable' : '',
+    ].filter(Boolean) as string[];
+
+    const executablePath = candidates.find((path) => existsSync(path));
+    if (!executablePath) {
+      throw new ServiceUnavailableException(
+        'PDF download is unavailable because Chrome/Chromium is not installed on the server.',
+      );
+    }
+
+    return executablePath;
+  }
+
   private async getBrowser() {
     return puppeteer.launch({
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH ||
-        (process.platform === 'win32'
-          ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-          : '/usr/bin/chromium-browser'),
+      executablePath: this.getExecutablePath(),
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
     });

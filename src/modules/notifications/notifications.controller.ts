@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Query,
   Body,
@@ -112,5 +113,18 @@ export class NotificationsController {
   @ApiResponse({ status: 404, description: 'Notification not found' })
   markRead(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.notificationsService.markRead(id, user);
+  }
+
+  // DELETE /notifications/:id
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a notification from the current user inbox' })
+  @ApiParam({ name: 'id', description: 'Notification ID (UUID)' })
+  @ApiResponse({ status: 200, description: 'Notification deleted' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
+  deleteForUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.notificationsService.deleteForUser(id, user);
   }
 }

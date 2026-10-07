@@ -144,7 +144,7 @@ export class BillingController {
   })
   @ApiResponse({ status: 404, description: 'Billing not found' })
   async getBillingPdf(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Res() res: Response,
   ) {
     const buffer = await this.billingService.generatePdf(id, 'billing');
@@ -167,7 +167,7 @@ export class BillingController {
   })
   @ApiResponse({ status: 404, description: 'Billing not found' })
   async getEstimatePdf(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Res() res: Response,
   ) {
     const buffer = await this.billingService.generatePdf(id, 'estimate');

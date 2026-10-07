@@ -85,8 +85,19 @@ export class NotificationsService {
       user.role === Role.ADMIN ? user.admin?.branchId : user.member?.branchId;
     if (!branchId)
       throw new ForbiddenException('Your account has no assigned branch');
+
+    const senderScope =
+      user.role === Role.ADMIN
+        ? {
+            triggeredBy: {
+              is: { role: Role.SUPER_ADMIN },
+            },
+          }
+        : {};
+
     return {
       OR: [{ branchId }, { branchId: null }],
+      ...senderScope,
       ...(user.role === Role.DIRECTOR
         ? {
             type: {
@@ -507,6 +518,27 @@ export class NotificationsService {
   }
 
   // ─── markAllRead ──────────────────────────────────────────────────────────
+
+  async deleteForUser(notificationId: string, user: NotificationViewer) {
+    const recipient = await this.prisma.notificationRecipient.findFirst({
+      where: {
+        notificationId,
+        userId: user.id,
+        notification: this.visibility(user),
+      },
+      select: { id: true },
+    });
+
+    if (!recipient) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    await this.prisma.notificationRecipient.delete({
+      where: { id: recipient.id },
+    });
+
+    return { deleted: true };
+  }
 
   async markAllRead(user: NotificationViewer) {
     const result = await this.prisma.notificationRecipient.updateMany({
