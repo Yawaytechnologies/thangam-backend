@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -103,6 +104,15 @@ export class NotificationsController {
   @ApiResponse({ status: 404, description: 'Notification not found' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.notificationsService.findOne(id, user);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Delete a notification recipient from your own inbox',
+  })
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.notificationsService.remove(id, user);
   }
 
   // PATCH /notifications/:id/read

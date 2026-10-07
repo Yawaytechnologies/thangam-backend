@@ -12,6 +12,7 @@ const mockPrisma = {
     update: jest.fn(),
     updateMany: jest.fn(),
     createMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
   notification: {
     findUnique: jest.fn(),
@@ -38,6 +39,64 @@ describe('NotificationsService', () => {
     mockPrisma.$transaction.mockImplementation((callback) =>
       callback(mockPrisma),
     );
+  });
+
+  describe('Superadmin property inbox', () => {
+    const user = { id: 'superadmin', role: Role.SUPER_ADMIN };
+    it('restricts notifications to Admin property activity and excludes self', async () => {
+      await service.findLatest(user);
+      expect(mockPrisma.notificationRecipient.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            userId: user.id,
+            notification: {
+              type: {
+                in: [
+                  NotificationType.PROPERTY_ACTIVITY,
+                  NotificationType.BOOKING_ACTIVITY,
+                  NotificationType.BILLING_ACTIVITY,
+                ],
+              },
+              triggeredById: { not: user.id },
+              triggeredBy: { is: { role: Role.ADMIN } },
+            },
+          },
+        }),
+      );
+    });
+    it('deletes only the visible recipient record from the current user inbox', async () => {
+      mockPrisma.notificationRecipient.deleteMany.mockResolvedValue({
+        count: 1,
+      });
+      await expect(service.remove('recipient-1', user)).resolves.toEqual({
+        deleted: true,
+      });
+      expect(mockPrisma.notificationRecipient.deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: 'recipient-1',
+          userId: user.id,
+          notification: {
+            type: {
+              in: [
+                NotificationType.PROPERTY_ACTIVITY,
+                NotificationType.BOOKING_ACTIVITY,
+                NotificationType.BILLING_ACTIVITY,
+              ],
+            },
+            triggeredById: { not: user.id },
+            triggeredBy: { is: { role: Role.ADMIN } },
+          },
+        },
+      });
+    });
+    it('rejects deletion of inaccessible or missing notifications', async () => {
+      mockPrisma.notificationRecipient.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      await expect(
+        service.remove('someone-elses-recipient', user),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('visibility consistency', () => {
@@ -206,7 +265,9 @@ describe('NotificationsService', () => {
       await service.getUnreadCount({ id: 'user-42', role: Role.SUPER_ADMIN });
       expect(mockPrisma.notificationRecipient.count).toHaveBeenCalledWith({
         where: {
-          notification: {},
+          notification: expect.objectContaining({
+            triggeredBy: { is: { role: Role.ADMIN } },
+          }),
           userId: 'user-42',
           status: NotificationStatus.UNREAD,
         },
@@ -232,7 +293,12 @@ describe('NotificationsService', () => {
 
       expect(mockPrisma.notificationRecipient.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { notification: {}, userId: 'user-1' },
+          where: {
+            notification: expect.objectContaining({
+              triggeredBy: { is: { role: Role.ADMIN } },
+            }),
+            userId: 'user-1',
+          },
           take: 10,
           orderBy: { createdAt: 'desc' },
         }),
@@ -284,7 +350,9 @@ describe('NotificationsService', () => {
         .catch(() => {});
       expect(mockPrisma.notificationRecipient.findFirst).toHaveBeenCalledWith({
         where: {
-          notification: {},
+          notification: expect.objectContaining({
+            triggeredBy: { is: { role: Role.ADMIN } },
+          }),
           notificationId: 'notif-99',
           userId: 'user-55',
         },
@@ -305,7 +373,9 @@ describe('NotificationsService', () => {
       });
       expect(mockPrisma.notificationRecipient.updateMany).toHaveBeenCalledWith({
         where: {
-          notification: {},
+          notification: expect.objectContaining({
+            triggeredBy: { is: { role: Role.ADMIN } },
+          }),
           userId: 'user-1',
           status: NotificationStatus.UNREAD,
         },
