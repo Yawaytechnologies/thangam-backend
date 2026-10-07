@@ -1,5 +1,9 @@
 import { existsSync } from 'node:fs';
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import {
   buildBookingFormHtml,

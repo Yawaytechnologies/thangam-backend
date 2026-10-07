@@ -143,10 +143,7 @@ export class BillingController {
     content: { 'application/pdf': {} },
   })
   @ApiResponse({ status: 404, description: 'Billing not found' })
-  async getBillingPdf(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async getBillingPdf(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.billingService.generatePdf(id, 'billing');
     res.set({
       'Content-Type': 'application/pdf',
@@ -166,10 +163,7 @@ export class BillingController {
     content: { 'application/pdf': {} },
   })
   @ApiResponse({ status: 404, description: 'Billing not found' })
-  async getEstimatePdf(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async getEstimatePdf(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.billingService.generatePdf(id, 'estimate');
     res.set({
       'Content-Type': 'application/pdf',
