@@ -18,7 +18,8 @@ const mockPrisma = {
     findUnique: jest.fn(),
     create: jest.fn(),
   },
-  user: { findMany: jest.fn() },
+  user: { findMany: jest.fn(), findUnique: jest.fn() },
+  admin: { findMany: jest.fn() },
   notificationMessage: { create: jest.fn() },
   $transaction: jest.fn(),
 };
@@ -41,7 +42,88 @@ describe('NotificationsService', () => {
     );
   });
 
-  describe('Superadmin property inbox', () => {
+  describe('property activity recipients', () => {
+    const notification = {
+      id: 'property-notification',
+      title: 'Property Activity',
+      message: 'Property A was updated.',
+      type: NotificationType.PROPERTY_ACTIVITY,
+      priority: 'LOW',
+      createdAt: new Date(),
+      relatedModule: 'properties',
+      relatedEntityId: 'property-1',
+    };
+
+    beforeEach(() => {
+      mockPrisma.notification.create.mockResolvedValue(notification);
+      mockPrisma.notificationRecipient.createMany.mockResolvedValue({
+        count: 1,
+      });
+    });
+
+    it('sends Admin property changes to active Super Admins only', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'super-admin-1' }]);
+      mockPrisma.user.findUnique.mockResolvedValue({ role: Role.ADMIN });
+
+      await service.dispatch({
+        title: notification.title,
+        message: notification.message,
+        type: NotificationType.PROPERTY_ACTIVITY,
+        triggeredById: 'admin-1',
+        branchId: 'branch-1',
+        propertyId: 'property-1',
+      });
+
+      expect(mockPrisma.notificationRecipient.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            notificationId: notification.id,
+            userId: 'super-admin-1',
+            status: NotificationStatus.UNREAD,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      expect(mockPrisma.admin.findMany).not.toHaveBeenCalled();
+    });
+
+    it('sends Super Admin property changes only to active Admins in that branch', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        role: Role.SUPER_ADMIN,
+      });
+      mockPrisma.admin.findMany.mockResolvedValue([{ userId: 'branch-admin' }]);
+
+      await service.dispatch({
+        title: notification.title,
+        message: notification.message,
+        type: NotificationType.PROPERTY_ACTIVITY,
+        triggeredById: 'super-admin-1',
+        branchId: 'branch-1',
+        propertyId: 'property-1',
+      });
+
+      expect(mockPrisma.admin.findMany).toHaveBeenCalledWith({
+        where: {
+          branchId: 'branch-1',
+          user: { status: 'ACTIVE' },
+        },
+        select: { userId: true },
+      });
+      expect(mockPrisma.notificationRecipient.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            notificationId: notification.id,
+            userId: 'branch-admin',
+            status: NotificationStatus.UNREAD,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    });
+  });
+
+  describe('Admin and Superadmin property-only inboxes', () => {
     const user = { id: 'superadmin', role: Role.SUPER_ADMIN };
     it('restricts notifications to Admin property activity and excludes self', async () => {
       await service.findLatest(user);
@@ -50,13 +132,7 @@ describe('NotificationsService', () => {
           where: {
             userId: user.id,
             notification: {
-              type: {
-                in: [
-                  NotificationType.PROPERTY_ACTIVITY,
-                  NotificationType.BOOKING_ACTIVITY,
-                  NotificationType.BILLING_ACTIVITY,
-                ],
-              },
+              type: NotificationType.PROPERTY_ACTIVITY,
               triggeredById: { not: user.id },
               triggeredBy: { is: { role: Role.ADMIN } },
             },
@@ -76,13 +152,7 @@ describe('NotificationsService', () => {
           id: 'recipient-1',
           userId: user.id,
           notification: {
-            type: {
-              in: [
-                NotificationType.PROPERTY_ACTIVITY,
-                NotificationType.BOOKING_ACTIVITY,
-                NotificationType.BILLING_ACTIVITY,
-              ],
-            },
+            type: NotificationType.PROPERTY_ACTIVITY,
             triggeredById: { not: user.id },
             triggeredBy: { is: { role: Role.ADMIN } },
           },
@@ -96,6 +166,29 @@ describe('NotificationsService', () => {
       await expect(
         service.remove('someone-elses-recipient', user),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('restricts Admin notifications to Super Admin property activity in their branch', async () => {
+      const admin = {
+        id: 'admin-1',
+        role: Role.ADMIN,
+        admin: { branchId: 'branch-1' },
+      };
+
+      await service.findLatest(admin);
+
+      expect(mockPrisma.notificationRecipient.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            userId: admin.id,
+            notification: {
+              OR: [{ branchId: 'branch-1' }, { branchId: null }],
+              type: NotificationType.PROPERTY_ACTIVITY,
+              triggeredBy: { is: { role: Role.SUPER_ADMIN } },
+            },
+          },
+        }),
+      );
     });
   });
 

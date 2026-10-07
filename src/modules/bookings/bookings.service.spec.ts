@@ -352,6 +352,7 @@ describe('BookingsService', () => {
     it('queues a booking confirmation message for the customer mobile number', async () => {
       const mockNotificationsService = {
         createNotification: jest.fn(),
+        dispatch: jest.fn(),
         sendBookingCustomerMessage: jest.fn(),
       };
       const serviceWithNotifications = new BookingsService(
@@ -429,7 +430,9 @@ describe('BookingsService', () => {
     it('updates booking and property workflow status', async () => {
       const existingBooking = {
         id: 'b1',
+        bookingId: 'STH-BK-0001',
         propertyId: 'prop-1',
+        branchId: 'branch-1',
         status: BookingStatus.BOOKING_INITIATED,
       };
       mockPrisma.booking.findUnique.mockResolvedValue(existingBooking);
@@ -445,10 +448,32 @@ describe('BookingsService', () => {
           workflowHistory: { create: jest.fn() },
         }),
       );
+      const notificationsService = {
+        createNotification: jest.fn(),
+        dispatch: jest.fn(),
+      };
+      const serviceWithNotifications = new BookingsService(
+        mockPrisma as any,
+        mockPdfService as any,
+        notificationsService as unknown as NotificationsService,
+      );
 
-      await service.updateStatus('b1', BookingStatus.TOKEN_RECEIVED, 'user-1');
+      await serviceWithNotifications.updateStatus(
+        'b1',
+        BookingStatus.TOKEN_RECEIVED,
+        'user-1',
+      );
 
       expect(mockTransaction).toHaveBeenCalled();
+      expect(notificationsService.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'PROPERTY_ACTIVITY',
+          triggeredById: 'user-1',
+          branchId: 'branch-1',
+          propertyId: 'prop-1',
+          relatedEntityId: 'prop-1',
+        }),
+      );
     });
   });
 });

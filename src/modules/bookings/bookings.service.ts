@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  Logger,
   ServiceUnavailableException,
   Optional,
 } from '@nestjs/common';
 import {
   BookingStatus,
+  NotificationType,
   WorkflowStatus,
   Role,
   PaymentMethod,
@@ -36,6 +38,8 @@ const BOOKING_TO_WORKFLOW: Record<BookingStatus, WorkflowStatus> = {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly pdfService: PdfService,
@@ -97,6 +101,35 @@ export class BookingsService {
       });
     } catch {
       // Notification failure should not block booking operations.
+    }
+  }
+
+  private async notifyPropertyWorkflowActivity(payload: {
+    bookingId: string;
+    propertyId: string;
+    workflowStatus: WorkflowStatus;
+    triggeredById: string;
+    branchId?: string | null;
+  }) {
+    if (!this.notificationsService) return;
+
+    try {
+      await this.notificationsService.dispatch({
+        title: 'Property Workflow Updated',
+        message: `Property workflow for booking ${payload.bookingId} changed to ${payload.workflowStatus}.`,
+        type: NotificationType.PROPERTY_ACTIVITY,
+        triggeredById: payload.triggeredById,
+        ...(payload.branchId ? { branchId: payload.branchId } : {}),
+        propertyId: payload.propertyId,
+        relatedModule: 'properties',
+        relatedEntityId: payload.propertyId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not notify users about property ${payload.propertyId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
@@ -461,6 +494,13 @@ export class BookingsService {
         propertyId: created.propertyId,
         relatedEntityId: created.id,
       });
+      await this.notifyPropertyWorkflowActivity({
+        bookingId: created.bookingId,
+        propertyId: created.propertyId,
+        workflowStatus: WorkflowStatus.BOOKING_INITIATED,
+        triggeredById: user.id,
+        branchId: created.branchId,
+      });
 
       await this.sendCustomerBookingMessage({
         senderId: user.id,
@@ -696,6 +736,15 @@ export class BookingsService {
       propertyId: booking.propertyId,
       relatedEntityId: booking.id,
     });
+    if (previousStatus !== status) {
+      await this.notifyPropertyWorkflowActivity({
+        bookingId: booking.bookingId,
+        propertyId: booking.propertyId,
+        workflowStatus: newWorkflowStatus,
+        triggeredById: userId,
+        branchId: booking.branchId,
+      });
+    }
 
     return updated;
   }

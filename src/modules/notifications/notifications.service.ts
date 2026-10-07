@@ -82,13 +82,7 @@ export class NotificationsService {
   private visibility(user: NotificationViewer): Prisma.NotificationWhereInput {
     if (user.role === Role.SUPER_ADMIN)
       return {
-        type: {
-          in: [
-            NotificationType.PROPERTY_ACTIVITY,
-            NotificationType.BOOKING_ACTIVITY,
-            NotificationType.BILLING_ACTIVITY,
-          ],
-        },
+        type: NotificationType.PROPERTY_ACTIVITY,
         triggeredById: { not: user.id },
         triggeredBy: { is: { role: Role.ADMIN } },
       };
@@ -97,18 +91,16 @@ export class NotificationsService {
     if (!branchId)
       throw new ForbiddenException('Your account has no assigned branch');
 
-    const senderScope =
-      user.role === Role.ADMIN
-        ? {
-            triggeredBy: {
-              is: { role: Role.SUPER_ADMIN },
-            },
-          }
-        : {};
+    if (user.role === Role.ADMIN) {
+      return {
+        OR: [{ branchId }, { branchId: null }],
+        type: NotificationType.PROPERTY_ACTIVITY,
+        triggeredBy: { is: { role: Role.SUPER_ADMIN } },
+      };
+    }
 
     return {
       OR: [{ branchId }, { branchId: null }],
-      ...senderScope,
       ...(user.role === Role.DIRECTOR
         ? {
             type: {
@@ -288,23 +280,24 @@ export class NotificationsService {
       : null;
     const notifySuperAdmins =
       actor?.role === Role.ADMIN &&
-      (
-        [
-          NotificationType.PROPERTY_ACTIVITY,
-          NotificationType.BOOKING_ACTIVITY,
-          NotificationType.BILLING_ACTIVITY,
-        ] as NotificationType[]
-      ).includes(payload.type);
+      payload.type === NotificationType.PROPERTY_ACTIVITY;
     superAdmins.forEach((u) => {
       if (notifySuperAdmins && u.id !== payload.triggeredById)
         recipientUserIds.add(u.id);
       else recipientUserIds.delete(u.id);
     });
 
-    // If branchId provided: include ADMIN users of that branch
-    if (payload.branchId) {
+    // Property updates are sent from Super Admins only to the affected branch.
+    if (
+      payload.branchId &&
+      payload.type === NotificationType.PROPERTY_ACTIVITY &&
+      actor?.role === Role.SUPER_ADMIN
+    ) {
       const branchAdmins = await this.prisma.admin.findMany({
-        where: { branchId: payload.branchId },
+        where: {
+          branchId: payload.branchId,
+          user: { status: 'ACTIVE' },
+        },
         select: { userId: true },
       });
       branchAdmins.forEach((a) => recipientUserIds.add(a.userId));
