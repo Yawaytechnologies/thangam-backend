@@ -6,17 +6,21 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
   Billing,
   Document,
   DocumentType,
+  NotificationType,
   Prisma,
   WorkflowStatus,
 } from '@prisma/client';
+import type { Property } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { generatePropertyId } from '../../common/utils/id-generator.util';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -25,6 +29,7 @@ import { PropertyFilterDto } from './dto/property-filter.dto';
 
 @Injectable()
 export class PropertiesService {
+  private readonly logger = new Logger(PropertiesService.name);
   private readonly propertyDocumentTypes: DocumentType[] = [
     DocumentType.LAYOUT_DOCUMENT,
     DocumentType.APPROVAL_DOCUMENT,
@@ -34,7 +39,33 @@ export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async notifyPropertyActivity(
+    property: Pick<Property, 'id' | 'propertyName' | 'branchId'>,
+    userId: string,
+    activity: string,
+  ) {
+    try {
+      await this.notificationsService.dispatch({
+        title: 'Property Activity',
+        message: `${property.propertyName} ${activity}.`,
+        type: NotificationType.PROPERTY_ACTIVITY,
+        relatedModule: 'properties',
+        relatedEntityId: property.id,
+        triggeredById: userId,
+        ...(property.branchId ? { branchId: property.branchId } : {}),
+        propertyId: property.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not notify users about property ${property.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   private async generateNextPropertyId(
     tx: Prisma.TransactionClient,
@@ -190,7 +221,7 @@ export class PropertiesService {
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const property = await this.prisma.$transaction(async (tx) => {
           const propertyId = await this.generateNextPropertyId(tx);
 
           const property = await tx.property.create({
@@ -227,6 +258,8 @@ export class PropertiesService {
 
           return property;
         });
+        await this.notifyPropertyActivity(property, userId, 'was created');
+        return property;
       } catch (error) {
         if (this.hasUniqueTarget(error, 'property_code')) {
           throw new ConflictException(
@@ -316,6 +349,11 @@ export class PropertiesService {
       uploadedBy,
     );
     const url = await this.documentsService.getSignedUrl(document.storagePath);
+    await this.notifyPropertyActivity(
+      property,
+      uploadedBy,
+      'image was uploaded',
+    );
 
     return { document, url };
   }
@@ -357,6 +395,11 @@ export class PropertiesService {
       ),
     );
 
+    await this.notifyPropertyActivity(
+      property,
+      uploadedBy,
+      `${files.length} image${files.length === 1 ? '' : 's'} uploaded`,
+    );
     return this.findOne(propertyId);
   }
 
@@ -402,6 +445,11 @@ export class PropertiesService {
       ),
     );
 
+    await this.notifyPropertyActivity(
+      property,
+      uploadedBy,
+      `${files.length} document${files.length === 1 ? '' : 's'} uploaded`,
+    );
     return this.findOne(propertyId);
   }
 
@@ -437,7 +485,7 @@ export class PropertiesService {
     return this.attachSignedUrls(documents);
   }
 
-  async update(id: string, dto: UpdatePropertyDto, _userId: string) {
+  async update(id: string, dto: UpdatePropertyDto, userId: string) {
     const property = await this.prisma.property.findUnique({ where: { id } });
     if (!property) {
       throw new NotFoundException(`Property with id ${id} not found`);
@@ -453,7 +501,7 @@ export class PropertiesService {
       }
     }
 
-    return this.prisma.property.update({
+    const updated = await this.prisma.property.update({
       where: { id },
       data: {
         ...(dto.branchId !== undefined && { branchId: dto.branchId }),
@@ -478,6 +526,8 @@ export class PropertiesService {
         ...(dto.mapLocation !== undefined && { mapLocation: dto.mapLocation }),
       },
     });
+    await this.notifyPropertyActivity(updated, userId, 'was updated');
+    return updated;
   }
 
   async updateWorkflow(id: string, dto: UpdateWorkflowDto, userId: string) {
@@ -486,7 +536,7 @@ export class PropertiesService {
       throw new NotFoundException(`Property with id ${id} not found`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.property.update({
         where: { id },
         data: { workflowStatus: dto.workflowStatus },
@@ -505,5 +555,11 @@ export class PropertiesService {
 
       return updated;
     });
+    await this.notifyPropertyActivity(
+      updated,
+      userId,
+      'workflow status was updated',
+    );
+    return updated;
   }
 }
