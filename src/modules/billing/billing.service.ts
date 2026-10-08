@@ -153,7 +153,10 @@ export class BillingService {
 
   async create(dto: CreateBillingDto, user: any) {
     const created = await this.prisma.$transaction(async (tx) => {
-      const billingStatus = dto.status ?? BillingStatus.PENDING;
+      const billingStatus =
+        dto.status === BillingStatus.FINAL_SETTLEMENT
+          ? BillingStatus.COMPLETED
+          : (dto.status ?? BillingStatus.PENDING);
       // 1. Find booking
       const booking = await tx.booking.findUnique({
         where: { id: dto.bookingId },
@@ -364,7 +367,12 @@ export class BillingService {
           ...(dto.termsConditions !== undefined && {
             termsConditions: dto.termsConditions,
           }),
-          ...(dto.status !== undefined && { status: dto.status }),
+          ...(dto.status !== undefined && {
+            status:
+              dto.status === BillingStatus.FINAL_SETTLEMENT
+                ? BillingStatus.COMPLETED
+                : dto.status,
+          }),
           ...(dto.bankName !== undefined && { bankName: dto.bankName }),
           ...(dto.favourOf !== undefined && { favourOf: dto.favourOf }),
           ...(dto.chequeNumber !== undefined && {
@@ -415,6 +423,8 @@ export class BillingService {
   }
 
   async updateStatus(id: string, status: BillingStatus, userId: string) {
+    if (status === BillingStatus.FINAL_SETTLEMENT)
+      status = BillingStatus.COMPLETED;
     const billing = await this.prisma.billing.findUnique({
       where: { id },
       include: {
