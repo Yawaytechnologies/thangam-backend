@@ -53,6 +53,34 @@ describe('BillingService', () => {
 
   // ─── findAll ───────────────────────────────────────────────────────────────
 
+  it('saves final settlement as completed and records the completed workflow', async () => {
+    mockPrisma.billing.findUnique.mockResolvedValue({
+      id: 'bill-1',
+      bookingId: 'booking-1',
+      billingId: 'BL-1',
+      status: BillingStatus.PENDING,
+    });
+    mockPrisma.billing.update.mockResolvedValue({
+      id: 'bill-1',
+      status: BillingStatus.COMPLETED,
+    });
+    mockTransaction.mockImplementation((callback) => callback(mockPrisma));
+    await service.updateStatus(
+      'bill-1',
+      BillingStatus.FINAL_SETTLEMENT,
+      'super-1',
+    );
+    expect(mockPrisma.billing.update).toHaveBeenCalledWith({
+      where: { id: 'bill-1' },
+      data: { status: BillingStatus.COMPLETED },
+    });
+    expect(mockPrisma.workflowHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ toStatus: BillingStatus.COMPLETED }),
+      }),
+    );
+  });
+
   describe('findAll', () => {
     beforeEach(() => {
       mockPrisma.billing.findMany.mockResolvedValue([]);
