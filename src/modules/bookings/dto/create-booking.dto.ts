@@ -133,8 +133,9 @@ export class CreateBookingDto {
   @IsNotEmpty()
   plotNumber: string;
 
-  @ApiPropertyOptional({ example: 1200 })
+  @ApiPropertyOptional({ example: 100, minimum: 100 })
   @IsNumber()
+  @Min(100)
   @IsOptional()
   squareFeet?: number;
 
