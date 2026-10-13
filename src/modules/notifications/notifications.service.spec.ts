@@ -12,6 +12,7 @@ const mockPrisma = {
     update: jest.fn(),
     updateMany: jest.fn(),
     createMany: jest.fn(),
+    delete: jest.fn(),
     deleteMany: jest.fn(),
   },
   notification: {
@@ -140,16 +141,20 @@ describe('NotificationsService', () => {
         }),
       );
     });
-    it('deletes only the visible recipient record from the current user inbox', async () => {
-      mockPrisma.notificationRecipient.deleteMany.mockResolvedValue({
-        count: 1,
+    it('deletes the visible notification by notification ID', async () => {
+      mockPrisma.notificationRecipient.findFirst.mockResolvedValue({
+        id: 'recipient-1',
       });
-      await expect(service.remove('recipient-1', user)).resolves.toEqual({
+      mockPrisma.notificationRecipient.delete.mockResolvedValue({});
+      await expect(service.deleteForUser('notification-1', user)).resolves.toEqual({
         deleted: true,
       });
-      expect(mockPrisma.notificationRecipient.deleteMany).toHaveBeenCalledWith({
+      expect(mockPrisma.notificationRecipient.findFirst).toHaveBeenCalledWith({
         where: {
-          id: 'recipient-1',
+          OR: [
+            { notificationId: 'notification-1' },
+            { id: 'notification-1' },
+          ],
           userId: user.id,
           notification: {
             type: NotificationType.PROPERTY_ACTIVITY,
@@ -157,14 +162,37 @@ describe('NotificationsService', () => {
             triggeredBy: { is: { role: Role.ADMIN } },
           },
         },
+        select: { id: true },
+      });
+      expect(mockPrisma.notificationRecipient.delete).toHaveBeenCalledWith({
+        where: { id: 'recipient-1' },
+      });
+    });
+    it('deletes the visible notification by recipient ID', async () => {
+      mockPrisma.notificationRecipient.findFirst.mockResolvedValue({
+        id: 'recipient-1',
+      });
+      mockPrisma.notificationRecipient.delete.mockResolvedValue({});
+      await expect(service.deleteForUser('recipient-1', user)).resolves.toEqual({
+        deleted: true,
+      });
+      expect(mockPrisma.notificationRecipient.findFirst).toHaveBeenCalledWith({
+        where: {
+          OR: [{ notificationId: 'recipient-1' }, { id: 'recipient-1' }],
+          userId: user.id,
+          notification: {
+            type: NotificationType.PROPERTY_ACTIVITY,
+            triggeredById: { not: user.id },
+            triggeredBy: { is: { role: Role.ADMIN } },
+          },
+        },
+        select: { id: true },
       });
     });
     it('rejects deletion of inaccessible or missing notifications', async () => {
-      mockPrisma.notificationRecipient.deleteMany.mockResolvedValue({
-        count: 0,
-      });
+      mockPrisma.notificationRecipient.findFirst.mockResolvedValue(null);
       await expect(
-        service.remove('someone-elses-recipient', user),
+        service.deleteForUser('someone-elses-notification', user),
       ).rejects.toThrow(NotFoundException);
     });
 
