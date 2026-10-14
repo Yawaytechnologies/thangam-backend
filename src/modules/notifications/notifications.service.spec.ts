@@ -145,16 +145,14 @@ describe('NotificationsService', () => {
       mockPrisma.notificationRecipient.findFirst.mockResolvedValue({
         id: 'recipient-1',
       });
-      mockPrisma.notificationRecipient.delete.mockResolvedValue({});
-      await expect(service.deleteForUser('notification-1', user)).resolves.toEqual({
+      await expect(
+        service.deleteForUser('notification-1', user),
+      ).resolves.toEqual({
         deleted: true,
       });
       expect(mockPrisma.notificationRecipient.findFirst).toHaveBeenCalledWith({
         where: {
-          OR: [
-            { notificationId: 'notification-1' },
-            { id: 'notification-1' },
-          ],
+          notificationId: 'notification-1',
           userId: user.id,
           notification: {
             type: NotificationType.PROPERTY_ACTIVITY,
@@ -194,6 +192,31 @@ describe('NotificationsService', () => {
       await expect(
         service.deleteForUser('someone-elses-notification', user),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('deletes an Admin notification using its notification ID and inbox owner', async () => {
+      mockPrisma.notificationRecipient.deleteMany.mockResolvedValue({
+        count: 1,
+      });
+      const admin = {
+        id: 'admin-1',
+        role: Role.ADMIN,
+        admin: { branchId: 'branch-1' },
+      };
+      await expect(
+        service.deleteForUser('notification-1', admin),
+      ).resolves.toEqual({ deleted: true });
+      expect(mockPrisma.notificationRecipient.deleteMany).toHaveBeenCalledWith({
+        where: {
+          notificationId: 'notification-1',
+          userId: admin.id,
+          notification: {
+            OR: [{ branchId: 'branch-1' }, { branchId: null }],
+            type: NotificationType.PROPERTY_ACTIVITY,
+            triggeredBy: { is: { role: Role.SUPER_ADMIN } },
+          },
+        },
+      });
     });
 
     it('restricts Admin notifications to Super Admin property activity in their branch', async () => {
