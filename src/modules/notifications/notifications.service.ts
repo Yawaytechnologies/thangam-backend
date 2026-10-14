@@ -518,18 +518,6 @@ export class NotificationsService {
 
   // ─── markRead ─────────────────────────────────────────────────────────────
 
-  async remove(recipientId: string, user: NotificationViewer) {
-    const result = await this.prisma.notificationRecipient.deleteMany({
-      where: {
-        id: recipientId,
-        userId: user.id,
-        notification: this.visibility(user),
-      },
-    });
-    if (!result.count) throw new NotFoundException('Notification not found');
-    return { deleted: true };
-  }
-
   async markRead(notificationId: string, user: NotificationViewer) {
     const recipient = await this.prisma.notificationRecipient.findFirst({
       where: {
@@ -555,23 +543,14 @@ export class NotificationsService {
   // ─── markAllRead ──────────────────────────────────────────────────────────
 
   async deleteForUser(notificationId: string, user: NotificationViewer) {
-    const recipient = await this.prisma.notificationRecipient.findFirst({
+    const result = await this.prisma.notificationRecipient.deleteMany({
       where: {
         notificationId,
         userId: user.id,
         notification: this.visibility(user),
       },
-      select: { id: true },
     });
-
-    if (!recipient) {
-      throw new NotFoundException('Notification not found');
-    }
-
-    await this.prisma.notificationRecipient.delete({
-      where: { id: recipient.id },
-    });
-
+    if (!result.count) throw new NotFoundException('Notification not found');
     return { deleted: true };
   }
 

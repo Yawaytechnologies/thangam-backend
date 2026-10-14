@@ -105,15 +105,6 @@ export class NotificationsController {
     return this.notificationsService.findOne(id, user);
   }
 
-  @Delete(':id')
-  @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Delete a notification recipient from your own inbox',
-  })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    return this.notificationsService.remove(id, user);
-  }
-
   // PATCH /notifications/:id/read
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark a notification as read' })
