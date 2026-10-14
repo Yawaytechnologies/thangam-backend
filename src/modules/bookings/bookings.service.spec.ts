@@ -132,6 +132,8 @@ describe('BookingsService', () => {
     const dto = {
       propertyId: 'prop-1',
       applicantName: 'Rajesh Kumar',
+      applicantAddress: '12 Anna Salai, Chennai',
+      pinCode: '600001',
       cellNumber: '9876543210',
       projectName: 'Green Valley',
       plotNumber: 'PLOT-101',

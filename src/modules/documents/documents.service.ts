@@ -99,6 +99,8 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
+    await this.ensureStorageBucket();
+
     const storagePath = `${entityType}/${entityId}/${Date.now()}-${file.originalname}`;
 
     let uploadError: Error | null = null;

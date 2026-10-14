@@ -48,6 +48,16 @@ describe('BranchesService', () => {
       members: 0,
     },
   };
+  const branchData = {
+    name: 'Chennai Central Branch',
+    branchType: 'Main Branch',
+    phone: '9876543210',
+    address: '12 Anna Salai',
+    city: 'Chennai',
+    district: 'Chennai',
+    state: 'Tamil Nadu',
+    pincode: '600001',
+  };
 
   const createService = () => {
     const prisma = {
@@ -88,7 +98,7 @@ describe('BranchesService', () => {
     prisma.admin.findUnique.mockResolvedValue(null);
 
     await service.create(
-      { name: 'Chennai Central Branch', adminId: 'super-user-1' },
+      { ...branchData, adminId: 'super-user-1' },
       { id: 'super-user-1', role: Role.SUPER_ADMIN },
     );
 
@@ -112,7 +122,7 @@ describe('BranchesService', () => {
     });
 
     await service.create(
-      { name: 'Chennai Central Branch', adminId: 'admin-user-1' },
+      { ...branchData, adminId: 'admin-user-1' },
       { id: 'super-user-1', role: Role.SUPER_ADMIN },
     );
 
@@ -131,7 +141,7 @@ describe('BranchesService', () => {
     ]);
 
     await service.create(
-      { name: 'Chennai Central Branch' },
+      branchData,
       { id: 'super-user-1', role: Role.SUPER_ADMIN },
     );
 

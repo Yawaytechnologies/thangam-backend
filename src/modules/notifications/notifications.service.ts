@@ -545,7 +545,7 @@ export class NotificationsService {
   async deleteForUser(notificationId: string, user: NotificationViewer) {
     const result = await this.prisma.notificationRecipient.deleteMany({
       where: {
-        notificationId,
+        OR: [{ notificationId: id }, { id }],
         userId: user.id,
         notification: this.visibility(user),
       },

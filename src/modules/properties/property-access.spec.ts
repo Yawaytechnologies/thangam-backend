@@ -20,7 +20,11 @@ describe('Property branch access', () => {
     property: { count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     $transaction: jest.fn(async (queries: unknown[]) => Promise.all(queries)),
   };
-  const service = new PropertiesService(prisma as any, {} as any);
+  const service = new PropertiesService(
+    prisma as any,
+    {} as any,
+    { dispatch: jest.fn() } as any,
+  );
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.property.count.mockResolvedValue(0);
